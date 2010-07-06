@@ -1,0 +1,23 @@
+
+Minimalistic syntax extension for type-safe, convenient execution of SQL
+statements.
+
+Sample usage on the toplevel:
+
+# #load "pa_sql.cmo";;
+# open Sqlexpr_sqlite;;
+# type user = { name : string; age : int };;
+type user = { name : string; age : int }
+# let insert_user db u = insert db sql"insert into users values(%s, %d)" u.name u.age;;
+value insert_user : Sqlexpr_sqlite.db -> user -> int64 = <fun>
+# let s = sql"create table users(name varchar(255) unique not null primary key, age integer)";;
+value s  : Sqlexpr_sqlite.Sqlexpr.statement '_a '_a = <abstr>
+# let create_tbl db = execute db s;;
+value create_tbl : Sqlexpr_sqlite.db -> unit = <fun>
+# let sel_with_age = sql"select @s{name} from users where age = %d";;
+value sel_with_age :
+  Sqlexpr_sqlite.Sqlexpr.expression (int -> '_a) string '_a = <abstr>
+# let with_age db age = select db sel_with_age age;;
+value with_age : Sqlexpr_sqlite.db -> int -> list string = <fun>
+
+

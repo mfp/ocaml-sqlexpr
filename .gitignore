@@ -1,0 +1,14 @@
+*.a
+*.o
+*.opt
+*.run
+*.cmx*
+*.cmi
+*.cmo
+*.cma
+*.cmxa
+*.omc
+.omakedb*
+.*swp
+*.s
+gmon.out
