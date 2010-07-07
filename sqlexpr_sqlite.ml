@@ -203,15 +203,18 @@ let new_tx_id =
   let n = ref 0 in
     fun () -> incr n; sprintf "__sqlexpr_sqlite_tx_%d_%d" pid !n
 
+let unsafe_execute db fmt =
+  ksprintf (fun sql -> ignore (Sqlite3.step (Sqlite3.prepare db sql))) fmt
+
 let transaction db f =
   let txid = new_tx_id () in
-    execute db sql"SAVEPOINT %s" txid;
+    unsafe_execute db "SAVEPOINT %s" txid;
     try
       let x = f db in
-        execute db sql"RELEASE %s" txid;
+        unsafe_execute db "RELEASE %s" txid;
         x
     with e ->
-      execute db sql"ROLLBACK TO %s" txid;
+      unsafe_execute db "ROLLBACK TO %s" txid;
       raise e
 
 module Monadic(M : sig
@@ -261,13 +264,13 @@ struct
 
   let transaction db f =
     let txid = new_tx_id () in
-      execute db sql"SAVEPOINT %s" txid;
+      unsafe_execute db "SAVEPOINT %s" txid;
       try_lwt
         lwt x = f db in
-          execute db sql"RELEASE %s" txid;
+          unsafe_execute db "RELEASE %s" txid;
           return x
       finally
-        execute db sql"ROLLBACK TO %s" txid;
+        unsafe_execute db "ROLLBACK TO %s" txid;
         return ()
 
 end
