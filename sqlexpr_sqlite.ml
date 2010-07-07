@@ -107,17 +107,22 @@ struct
   let make_expression stmt n f = { statement = stmt; get_data = (n, f) }
 
   let prepare db f (params, nparams, sql, prep) =
-    let stmt = match prep with
-        None -> Sqlite3.prepare db sql
-      | Some r -> match !r with
-            Some stmt ->
-              (* FIXME: check return code *)
-              ignore (Sqlite3.reset stmt);
-              stmt
-          | None ->
-              let stmt = Sqlite3.prepare db sql in
-                r := Some stmt;
-                stmt
+    let stmt =
+      try
+        match prep with
+            None -> Sqlite3.prepare db sql
+          | Some r -> match !r with
+                Some stmt ->
+                  (* FIXME: check return code *)
+                  ignore (Sqlite3.reset stmt);
+                  stmt
+              | None ->
+                  let stmt = Sqlite3.prepare db sql in
+                    r := Some stmt;
+                    stmt
+      with Sqlite3.Error s ->
+        raise (Sqlite3.Error (sprintf "Error with SQL statement %S:\n%s"
+                                sql s))
     in
       List.iteri
         (fun n v -> ignore (Sqlite3.bind stmt (nparams - n) v))
