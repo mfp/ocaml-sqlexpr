@@ -96,6 +96,28 @@ struct
     get_data : int * (Sqlite3.Data.t array -> 'b);
   }
 
+  let profile_ch =
+    try
+      Some (open_out_gen [Open_append; Open_creat; Open_binary] 0x644
+              (Unix.getenv "OCAML_SQLEXPR_PROFILE"))
+    with Not_found -> None
+
+  let profile sql f =
+    match profile_ch with
+        None -> f ()
+      | Some ch ->
+          let t0 = Unix.gettimeofday () in
+          let y = f () in
+          let dt = Unix.gettimeofday () -. t0 in
+          let sql = String.copy sql in
+            for i = 0 to String.length sql - 1 do
+              match sql.[i] with
+                  '\r' | '\n' | '\t' -> sql.[i] <- ' '
+                | _ -> ()
+            done;
+            Printf.fprintf ch "%8.6f\t%s\n" dt sql;
+            y
+
   let make_statement ~cacheable sql directive =
     {
       sql_statement = sql;
@@ -127,7 +149,7 @@ struct
       List.iteri
         (fun n v -> ignore (Sqlite3.bind stmt (nparams - n) v))
         params;
-      f stmt
+      profile sql (fun () -> f stmt)
 
   let do_select f db p =
     p.directive (prepare db f)
