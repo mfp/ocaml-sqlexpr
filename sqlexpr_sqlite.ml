@@ -244,11 +244,7 @@ let new_tx_id =
     fun () -> incr n; sprintf "__sqlexpr_sqlite_tx_%d_%d" pid !n
 
 let unsafe_execute db fmt =
-  ksprintf
-    (fun sql ->
-       try check_ok Sqlite3.step (Sqlite3.prepare db sql)
-       with e -> raise_exn e)
-    fmt
+  ksprintf (fun sql -> check_ok (Sqlite3.exec db) sql) fmt
 
 let transaction db f =
   let txid = new_tx_id () in
