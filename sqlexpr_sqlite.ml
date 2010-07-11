@@ -2,6 +2,9 @@
 open Printf
 open ExtList
 
+exception Error of exn
+exception Sqlite_error of string * Sqlite3.Rc.t
+
 type db = Sqlite3.db
 
 let open_db fname = Sqlite3.db_open fname
@@ -10,6 +13,13 @@ let close_db db =
   try
     ignore (Sqlite3.db_close db)
   with Sqlite3.Error _ -> ()
+
+let raise_error errcode =
+  raise (Error (Sqlite_error (Sqlite3.Rc.to_string errcode, errcode)))
+
+let raise_exn exn = raise (Error exn)
+
+let failwithfmt fmt = Printf.ksprintf (fun s -> raise (Error (Failure s))) fmt
 
 module Directives =
 struct
@@ -52,8 +62,7 @@ struct
   open Sqlite3.Data
 
   let error s =
-    failwith
-      (sprintf "Sqlexpr_sqlite error: bad data (expected %s)" s)
+    failwithfmt "Sqlexpr_sqlite error: bad data (expected %s)" s
 
   let text = function
       TEXT s | BLOB s -> s
@@ -128,26 +137,26 @@ struct
 
   let make_expression stmt n f = { statement = stmt; get_data = (n, f) }
 
+  let check_ok f x = match f x with
+      Sqlite3.Rc.OK -> ()
+    | code -> raise_error code
+
   let prepare db f (params, nparams, sql, prep) =
     let stmt =
       try
         match prep with
             None -> Sqlite3.prepare db sql
           | Some r -> match !r with
-                Some stmt ->
-                  (* FIXME: check return code *)
-                  ignore (Sqlite3.reset stmt);
-                  stmt
+                Some stmt -> check_ok Sqlite3.reset stmt; stmt
               | None ->
                   let stmt = Sqlite3.prepare db sql in
                     r := Some stmt;
                     stmt
-      with Sqlite3.Error s ->
-        raise (Sqlite3.Error (sprintf "Error with SQL statement %S:\n%s"
-                                sql s))
+      with e ->
+        failwithfmt "Error with SQL statement %S:\n%s" sql (Printexc.to_string e)
     in
       List.iteri
-        (fun n v -> ignore (Sqlite3.bind stmt (nparams - n) v))
+        (fun n v -> check_ok (Sqlite3.bind stmt (nparams - n)) v)
         params;
       profile sql (fun () -> f stmt)
 
@@ -157,31 +166,31 @@ struct
        if p.cacheable then Some p.prepared_statement else None)
 
   let execute db (p : ('a, unit) statement) =
-    do_select (fun stmt -> ignore (Sqlite3.step stmt)) db p
+    do_select (fun stmt -> check_ok Sqlite3.step stmt) db p
 
   let insert db p =
     do_select
-      (fun stmt -> ignore (Sqlite3.step stmt); Sqlite3.last_insert_rowid db)
+      (fun stmt -> check_ok Sqlite3.step stmt; Sqlite3.last_insert_rowid db)
       db p
 
   let check_num_cols s stmt expr =
     let expected = fst expr.get_data in
     let actual = Array.length (Sqlite3.row_data stmt) in
       if expected <> actual then
-        failwith
-          (sprintf "Sqlexpr_sqlite.%s: wrong number of columns \
-                    (expected %d, got %d)" s expected actual)
+        failwithfmt
+          "Sqlexpr_sqlite.%s: wrong number of columns \
+           (expected %d, got %d)" s expected actual
 
   let select_f db f expr =
     do_select
       (fun stmt ->
          let rec loop l =
            match Sqlite3.step stmt with
-               (* FIXME: error checking *)
                Sqlite3.Rc.ROW ->
                  check_num_cols "select" stmt expr;
                  loop (f (snd expr.get_data (Sqlite3.row_data stmt)) :: l)
-             | _ -> List.rev l
+             | Sqlite3.Rc.DONE -> List.rev l
+             | rc -> raise_error rc
          in loop [])
       db
       expr.statement
@@ -192,9 +201,8 @@ struct
     do_select
       (fun stmt ->
          match Sqlite3.step stmt with
-             (* FIXME: error checking *)
              Sqlite3.Rc.ROW -> snd expr.get_data (Sqlite3.row_data stmt)
-           | _ -> raise Not_found)
+           | rc -> raise_error rc)
       db
       expr.statement
 
@@ -203,12 +211,12 @@ struct
       (fun stmt ->
          let rec loop () =
            match Sqlite3.step stmt with
-               (* FIXME: error checking *)
                Sqlite3.Rc.ROW ->
                  check_num_cols "iter" stmt expr;
                  f (snd expr.get_data (Sqlite3.row_data stmt));
                  loop ()
-             | _ -> ()
+             | Sqlite3.Rc.DONE -> ()
+             | rc -> raise_error rc
          in loop ())
       db
       expr.statement
@@ -218,11 +226,11 @@ struct
       (fun stmt ->
          let rec loop acc =
            match Sqlite3.step stmt with
-               (* FIXME: error checking *)
                Sqlite3.Rc.ROW ->
                  check_num_cols "fold" stmt expr;
                  loop (f init (snd expr.get_data (Sqlite3.row_data stmt)))
-             | _ -> acc
+             | Sqlite3.Rc.DONE -> acc
+             | rc -> raise_error rc
          in loop init)
       db
       expr.statement
@@ -236,7 +244,11 @@ let new_tx_id =
     fun () -> incr n; sprintf "__sqlexpr_sqlite_tx_%d_%d" pid !n
 
 let unsafe_execute db fmt =
-  ksprintf (fun sql -> ignore (Sqlite3.step (Sqlite3.prepare db sql))) fmt
+  ksprintf
+    (fun sql ->
+       try check_ok Sqlite3.step (Sqlite3.prepare db sql)
+       with e -> raise_exn e)
+    fmt
 
 let transaction db f =
   let txid = new_tx_id () in
@@ -270,11 +282,11 @@ struct
          try_lwt
            let rec loop acc =
              match Sqlite3.step stmt with
-                 (* FIXME: error checking *)
                  Sqlite3.Rc.ROW ->
                    check_num_cols "fold" stmt expr;
                    f init (snd expr.get_data (Sqlite3.row_data stmt)) >>= loop
-               | _ -> return acc
+               | Sqlite3.Rc.DONE -> return acc
+               | rc -> try_lwt raise_error rc
            in loop init)
       db
       expr.statement
@@ -285,11 +297,11 @@ struct
          try_lwt
            let rec loop () =
              match Sqlite3.step stmt with
-                 (* FIXME: error checking *)
                  Sqlite3.Rc.ROW ->
                    check_num_cols "fold" stmt expr;
                    f (snd expr.get_data (Sqlite3.row_data stmt)) >>= loop
-               | _ -> return ()
+               | Sqlite3.Rc.DONE -> return ()
+               | rc -> try_lwt raise_error rc
            in loop ())
       db
       expr.statement

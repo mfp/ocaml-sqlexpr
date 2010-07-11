@@ -1,5 +1,8 @@
 type db
 
+exception Error of exn
+exception Sqlite_error of string * Sqlite3.Rc.t
+
 val open_db : string -> db
 val close_db : db -> unit
 
