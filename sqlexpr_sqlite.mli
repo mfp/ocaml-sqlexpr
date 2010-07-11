@@ -6,7 +6,7 @@ exception Sqlite_error of string * Sqlite3.Rc.t
 val open_db : string -> db
 val close_db : db -> unit
 
-module Sqlexpr :
+module Make(M : Sqlexpr_concurrency.THREAD) :
 sig
   module Directives :
   sig
@@ -26,21 +26,21 @@ sig
 
   module Conversion :
   sig
-    val text : Sqlite3.Data.t -> string
-    val blob : Sqlite3.Data.t -> string
-    val int : Sqlite3.Data.t -> int
-    val int32 : Sqlite3.Data.t -> int32
-    val int64 : Sqlite3.Data.t -> int64
-    val float : Sqlite3.Data.t -> float
-    val bool : Sqlite3.Data.t -> bool
-    val maybe : (Sqlite3.Data.t -> 'a) -> Sqlite3.Data.t -> 'a option
-    val maybe_text : Sqlite3.Data.t -> string option
-    val maybe_blob : Sqlite3.Data.t -> string option
-    val maybe_int : Sqlite3.Data.t -> int option
-    val maybe_int32 : Sqlite3.Data.t -> int32 option
-    val maybe_int64 : Sqlite3.Data.t -> int64 option
-    val maybe_float : Sqlite3.Data.t -> float option
-    val maybe_bool : Sqlite3.Data.t -> bool option
+    val text : Sqlite3.Data.t -> string M.t
+    val blob : Sqlite3.Data.t -> string M.t
+    val int : Sqlite3.Data.t -> int M.t
+    val int32 : Sqlite3.Data.t -> int32 M.t
+    val int64 : Sqlite3.Data.t -> int64 M.t
+    val float : Sqlite3.Data.t -> float M.t
+    val bool : Sqlite3.Data.t -> bool M.t
+    val maybe : (Sqlite3.Data.t -> 'a M.t) -> Sqlite3.Data.t -> 'a option M.t
+    val maybe_text : Sqlite3.Data.t -> string option M.t
+    val maybe_blob : Sqlite3.Data.t -> string option M.t
+    val maybe_int : Sqlite3.Data.t -> int option M.t
+    val maybe_int32 : Sqlite3.Data.t -> int32 option M.t
+    val maybe_int64 : Sqlite3.Data.t -> int64 option M.t
+    val maybe_float : Sqlite3.Data.t -> float option M.t
+    val maybe_bool : Sqlite3.Data.t -> bool option M.t
   end
 
   type ('a, 'b) statement
@@ -55,34 +55,17 @@ sig
     ('a, 'c) statement -> int -> (Sqlite3.Data.t array -> 'b) ->
     ('a, 'b, 'c) expression
 
-  val execute : db -> ('a, unit) statement -> 'a
-  val insert : db -> ('a, int64) statement -> 'a
+  val execute : db -> ('a, unit M.t) statement -> 'a
+  val insert : db -> ('a, int64 M.t) statement -> 'a
 
-  val select_f : db -> ('a -> 'b) -> ('c, 'a, 'b list) expression -> 'c
-  val select : db -> ('c, 'a, 'a list) expression -> 'c
-  val select_one : db -> ('c, 'a, 'a) expression -> 'c
-  val iter : db -> ('a -> unit) -> ('c, 'a, unit) expression -> 'c
-  val fold : db -> ('a -> 'b -> 'a) -> 'a -> ('c, 'b, 'a) expression -> 'c
+  val select_f : db -> ('a -> 'b M.t) -> ('c, 'a, 'b list M.t) expression -> 'c
+  val select : db -> ('c, 'a M.t, 'a list M.t) expression -> 'c
+  val select_one : db -> ('c, 'a M.t, 'a M.t) expression -> 'c
 
-  val transaction : db -> (db -> 'a) -> 'a
-end
+  val transaction : db -> (db -> unit M.t) -> unit M.t
 
-open Sqlexpr
-
-module Monadic :
-  functor
-    (M : sig
-           type 'a t
-           val return : 'a -> 'a t
-           val bind : 'a t -> ('a -> 'b t) -> 'b t
-           val fail : exn -> 'a t
-           val catch : (unit -> 'a t) -> (exn -> 'a t) -> 'a t
-           val finalize : (unit -> 'a t) -> (unit -> 'a t) -> 'a t
-         end) ->
-sig
   val fold :
     db -> ('a -> 'b -> 'a M.t) -> 'a -> ('c, 'b, 'a M.t) expression -> 'c
-
   val iter : db -> ('a -> unit M.t) -> ('b, 'a, unit M.t) expression -> 'b
 
   val transaction : db -> (db -> unit M.t) -> unit M.t

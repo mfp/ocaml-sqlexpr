@@ -14,12 +14,17 @@ let close_db db =
     ignore (Sqlite3.db_close db)
   with Sqlite3.Error _ -> ()
 
-let raise_error errcode =
-  raise (Error (Sqlite_error (Sqlite3.Rc.to_string errcode, errcode)))
+module type THREAD = Sqlexpr_concurrency.THREAD
 
-let raise_exn exn = raise (Error exn)
+module Error(M : THREAD) =
+struct
+  let raise_error errcode =
+    M.fail (Error (Sqlite_error (Sqlite3.Rc.to_string errcode, errcode)))
 
-let failwithfmt fmt = Printf.ksprintf (fun s -> raise (Error (Failure s))) fmt
+  let raise_exn exn = M.fail (Error exn)
+
+  let failwithfmt fmt = Printf.ksprintf (fun s -> M.fail (Error (Failure s))) fmt
+end
 
 module Directives =
 struct
@@ -57,33 +62,38 @@ struct
   let any k st f x = blob k st (f x)
 end
 
-module Conversion =
+module MkConversion(M : THREAD) =
 struct
   open Sqlite3.Data
+  module Lwt = M
+  open Lwt
+  include Error(M)
 
   let error s =
     failwithfmt "Sqlexpr_sqlite error: bad data (expected %s)" s
 
   let text = function
-      TEXT s | BLOB s -> s
-    | INT n -> Int64.to_string n
-    | FLOAT f -> string_of_float f
+      TEXT s | BLOB s -> return s
+    | INT n -> return (Int64.to_string n)
+    | FLOAT f -> return (string_of_float f)
     | _ -> error "text"
 
-  let blob = function BLOB s | TEXT s -> s | _ -> error "blob"
+  let blob = function BLOB s | TEXT s -> return s | _ -> error "blob"
 
-  let int = function INT n -> Int64.to_int n | _ -> error "int"
-  let int32 = function INT n -> Int64.to_int32 n | _ -> error "int"
-  let int64 = function INT n -> n | _ -> error "int"
+  let int = function INT n -> return (Int64.to_int n) | _ -> error "int"
+  let int32 = function INT n -> return (Int64.to_int32 n) | _ -> error "int"
+  let int64 = function INT n -> return n | _ -> error "int"
 
-  let bool = function INT 0L -> false | INT _ -> true | _ -> error "int"
+  let bool = function INT 0L -> return false | INT _ -> return true | _ -> error "int"
 
   let float = function
-      INT n -> Int64.to_float n
-    | FLOAT n -> n
+      INT n -> return (Int64.to_float n)
+    | FLOAT n -> return n
     | _ -> error "float"
 
-  let maybe f = function NULL -> None | x -> Some (f x)
+  let maybe f = function
+      NULL -> return None
+    | x -> lwt y = f x in return (Some y)
 
   let maybe_text = maybe text
   let maybe_blob = maybe blob
@@ -94,12 +104,16 @@ struct
   let maybe_bool = maybe bool
 end
 
-open Directives
-
-module Sqlexpr =
+module Make(M : THREAD) =
 struct
+  module Lwt = M
+  open Lwt
+  include Error(Lwt)
+
   module Directives = Directives
-  module Conversion = Conversion
+  module Conversion = MkConversion(M)
+
+  open Directives
 
   type ('a, 'b) statement = ('a, 'b) Directives.statement
 
@@ -141,26 +155,27 @@ struct
   let make_expression stmt n f = { statement = stmt; get_data = (n, f) }
 
   let check_ok f x = match f x with
-      Sqlite3.Rc.OK -> ()
+      Sqlite3.Rc.OK -> return ()
     | code -> raise_error code
 
   let prepare db f (params, nparams, sql, prep) =
-    let stmt =
-      try
+    lwt stmt =
+      try_lwt
         match prep with
-            None -> Sqlite3.prepare db sql
+            None -> return (Sqlite3.prepare db sql)
           | Some r -> match !r with
-                Some stmt -> check_ok Sqlite3.reset stmt; stmt
+                Some stmt -> check_ok Sqlite3.reset stmt >> return stmt
               | None ->
                   let stmt = Sqlite3.prepare db sql in
                     r := Some stmt;
-                    stmt
+                    return stmt
       with e ->
-        failwithfmt "Error with SQL statement %S:\n%s" sql (Printexc.to_string e)
+        failwithfmt "Error with SQL statement %S:\n%s" sql (Printexc.to_string e) in
+    let rec iteri ?(i = 0) f = function
+        [] -> return ()
+      | hd :: tl -> f i hd >> iteri ~i:(i + 1) f tl
     in
-      List.iteri
-        (fun n v -> check_ok (Sqlite3.bind stmt (nparams - n)) v)
-        params;
+      iteri (fun n v -> check_ok (Sqlite3.bind stmt (nparams - n)) v) params >>
       profile sql (fun () -> f stmt)
 
   let do_select f db p =
@@ -168,18 +183,19 @@ struct
       ([], 0, p.sql_statement,
        if p.cacheable then Some p.prepared_statement else None)
 
-  let execute db (p : ('a, unit) statement) =
+  let execute db (p : ('a, unit M.t) statement) =
     do_select (fun stmt -> check_ok Sqlite3.step stmt) db p
 
   let insert db p =
     do_select
-      (fun stmt -> check_ok Sqlite3.step stmt; Sqlite3.last_insert_rowid db)
+      (fun stmt -> check_ok Sqlite3.step stmt >> return (Sqlite3.last_insert_rowid db))
       db p
 
   let check_num_cols s stmt expr =
     let expected = fst expr.get_data in
     let actual = Array.length (Sqlite3.row_data stmt) in
-      if expected <> actual then
+      if expected = actual then return ()
+      else
         failwithfmt
           "Sqlexpr_sqlite.%s: wrong number of columns \
            (expected %d, got %d)" s expected actual
@@ -190,9 +206,10 @@ struct
          let rec loop l =
            match Sqlite3.step stmt with
                Sqlite3.Rc.ROW ->
-                 check_num_cols "select" stmt expr;
-                 loop (f (snd expr.get_data (Sqlite3.row_data stmt)) :: l)
-             | Sqlite3.Rc.DONE -> List.rev l
+                 check_num_cols "select" stmt expr >>
+                 lwt x = f (snd expr.get_data (Sqlite3.row_data stmt)) in
+                   loop (x :: l)
+             | Sqlite3.Rc.DONE -> return (List.rev l)
              | rc -> raise_error rc
          in loop [])
       db
@@ -215,10 +232,10 @@ struct
          let rec loop () =
            match Sqlite3.step stmt with
                Sqlite3.Rc.ROW ->
-                 check_num_cols "iter" stmt expr;
-                 f (snd expr.get_data (Sqlite3.row_data stmt));
+                 check_num_cols "iter" stmt expr >>
+                 f (snd expr.get_data (Sqlite3.row_data stmt)) >>
                  loop ()
-             | Sqlite3.Rc.DONE -> ()
+             | Sqlite3.Rc.DONE -> return ()
              | rc -> raise_error rc
          in loop ())
       db
@@ -230,7 +247,7 @@ struct
          let rec loop acc =
            match Sqlite3.step stmt with
                Sqlite3.Rc.ROW ->
-                 check_num_cols "fold" stmt expr;
+                 check_num_cols "fold" stmt expr >>
                  loop (f init (snd expr.get_data (Sqlite3.row_data stmt)))
              | Sqlite3.Rc.DONE -> acc
              | rc -> raise_error rc
@@ -248,29 +265,13 @@ struct
 
   let transaction db f =
     let txid = new_tx_id () in
-      unsafe_execute db "SAVEPOINT %s" txid;
-      try
-        let x = f db in
-          unsafe_execute db "RELEASE %s" txid;
-          x
-      with e ->
-        unsafe_execute db "ROLLBACK TO %s" txid;
-        raise e
-end
-
-module Monadic(M : sig
-                 type 'a t
-                 val return : 'a -> 'a t
-                 val bind : 'a t -> ('a -> 'b t) -> 'b t
-                 val fail : exn -> 'a t
-                 val catch : (unit -> 'a t) -> (exn -> 'a t) -> 'a t
-                 val finalize : (unit -> 'a t) -> (unit -> 'a t) -> 'a t
-               end)
-=
-struct
-  module Lwt = M
-  open Lwt
-  open Sqlexpr
+      unsafe_execute db "SAVEPOINT %s" txid >>
+      try_lwt
+        lwt x = f db in
+          unsafe_execute db "RELEASE %s" txid >>
+          return x
+      finally
+        unsafe_execute db "ROLLBACK TO %s" txid
 
   let (>>=) = bind
 
@@ -281,7 +282,7 @@ struct
            match Sqlite3.step stmt with
                Sqlite3.Rc.ROW ->
                  begin try_lwt
-                   check_num_cols "fold" stmt expr;
+                   check_num_cols "fold" stmt expr >>
                    f init (snd expr.get_data (Sqlite3.row_data stmt))
                  end >>= loop
              | Sqlite3.Rc.DONE -> return acc
@@ -297,7 +298,7 @@ struct
            match Sqlite3.step stmt with
                Sqlite3.Rc.ROW ->
                  begin try_lwt
-                   check_num_cols "fold" stmt expr;
+                   check_num_cols "fold" stmt expr >>
                    f (snd expr.get_data (Sqlite3.row_data stmt))
                  end >>= loop
              | Sqlite3.Rc.DONE -> return ()
@@ -305,19 +306,4 @@ struct
          in loop ())
       db
       expr.statement
-
-  let transaction db f =
-    let txid = new_tx_id () in
-      (try_lwt unsafe_execute db "SAVEPOINT %s" txid; return ()) >>
-      try_lwt
-        lwt x = f db in
-          unsafe_execute db "RELEASE %s" txid;
-          return x
-      finally
-        try_lwt
-          unsafe_execute db "ROLLBACK TO %s" txid;
-          return ()
-
 end
-
-
