@@ -275,43 +275,46 @@ struct
   let fold db f init expr =
     do_select
       (fun stmt ->
-         try_lwt
-           let rec loop acc =
-             match Sqlite3.step stmt with
-                 Sqlite3.Rc.ROW ->
+         let rec loop acc =
+           match Sqlite3.step stmt with
+               Sqlite3.Rc.ROW ->
+                 begin try_lwt
                    check_num_cols "fold" stmt expr;
-                   f init (snd expr.get_data (Sqlite3.row_data stmt)) >>= loop
-               | Sqlite3.Rc.DONE -> return acc
-               | rc -> try_lwt raise_error rc
-           in loop init)
+                   f init (snd expr.get_data (Sqlite3.row_data stmt))
+                 end >>= loop
+             | Sqlite3.Rc.DONE -> return acc
+             | rc -> try_lwt raise_error rc
+         in loop init)
       db
       expr.statement
 
   let iter db f expr =
     do_select
       (fun stmt ->
-         try_lwt
-           let rec loop () =
-             match Sqlite3.step stmt with
-                 Sqlite3.Rc.ROW ->
+         let rec loop () =
+           match Sqlite3.step stmt with
+               Sqlite3.Rc.ROW ->
+                 begin try_lwt
                    check_num_cols "fold" stmt expr;
-                   f (snd expr.get_data (Sqlite3.row_data stmt)) >>= loop
-               | Sqlite3.Rc.DONE -> return ()
-               | rc -> try_lwt raise_error rc
-           in loop ())
+                   f (snd expr.get_data (Sqlite3.row_data stmt))
+                 end >>= loop
+             | Sqlite3.Rc.DONE -> return ()
+             | rc -> try_lwt raise_error rc
+         in loop ())
       db
       expr.statement
 
   let transaction db f =
     let txid = new_tx_id () in
-      unsafe_execute db "SAVEPOINT %s" txid;
+      (try_lwt unsafe_execute db "SAVEPOINT %s" txid; return ()) >>
       try_lwt
         lwt x = f db in
           unsafe_execute db "RELEASE %s" txid;
           return x
       finally
-        unsafe_execute db "ROLLBACK TO %s" txid;
-        return ()
+        try_lwt
+          unsafe_execute db "ROLLBACK TO %s" txid;
+          return ()
 
 end
 
