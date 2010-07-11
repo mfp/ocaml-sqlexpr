@@ -188,6 +188,16 @@ struct
 
   let select db expr = select_f db (fun x -> x) expr
 
+  let select_one db expr =
+    do_select
+      (fun stmt ->
+         match Sqlite3.step stmt with
+             (* FIXME: error checking *)
+             Sqlite3.Rc.ROW -> snd expr.get_data (Sqlite3.row_data stmt)
+           | _ -> raise Not_found)
+      db
+      expr.statement
+
   let iter db f expr =
     do_select
       (fun stmt ->

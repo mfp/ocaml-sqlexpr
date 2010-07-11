@@ -60,6 +60,7 @@ val insert : db -> ('a, int64) statement -> 'a
 
 val select_f : db -> ('a -> 'b) -> ('c, 'a, 'b list) expression -> 'c
 val select : db -> ('c, 'a, 'a list) expression -> 'c
+val select_one : db -> ('c, 'a, 'a) expression -> 'c
 val iter : db -> ('a -> unit) -> ('c, 'a, unit) expression -> 'c
 val fold : db -> ('a -> 'b -> 'a) -> 'a -> ('c, 'b, 'a) expression -> 'c
 
