@@ -70,15 +70,15 @@ let new_id =
       sprintf "__pa_sql_%d" !n
 
 let directive_expr ?(_loc = Loc.ghost) = function
-    Input `Int -> <:expr< Directives.int >>
-  | Input `Int32 -> <:expr< Directives.int32 >>
-  | Input `Int64 -> <:expr< Directives.int64 >>
-  | Input `Text -> <:expr< Directives.text >>
-  | Input `Blob -> <:expr< Directives.blob >>
-  | Input `Float -> <:expr< Directives.float >>
-  | Input `Bool -> <:expr< Directives.bool >>
-  | Input `Any -> <:expr< Directives.any >>
-  | Literal s -> <:expr< Directives.literal $str:s$ >>
+    Input `Int -> <:expr< Sqlexpr.Directives.int >>
+  | Input `Int32 -> <:expr< Sqlexpr.Directives.int32 >>
+  | Input `Int64 -> <:expr< Sqlexpr.Directives.int64 >>
+  | Input `Text -> <:expr< Sqlexpr.Directives.text >>
+  | Input `Blob -> <:expr< Sqlexpr.Directives.blob >>
+  | Input `Float -> <:expr< Sqlexpr.Directives.float >>
+  | Input `Bool -> <:expr< Sqlexpr.Directives.bool >>
+  | Input `Any -> <:expr< Sqlexpr.Directives.any >>
+  | Literal s -> <:expr< Sqlexpr.Directives.literal $str:s$ >>
   | Output _ -> assert false
 
 let sql_statement l =
@@ -110,7 +110,7 @@ let create_sql_expression _loc ~cacheable sql =
   let conv_expr kind nullable e =
     let expr x =
       let name = (if nullable then "maybe_" else "") ^ x in
-        <:expr< Conversion.$lid:name$ $e$ >>
+        <:expr< Sqlexpr.Conversion.$lid:name$ $e$ >>
     in
       match kind with
           `Int -> expr "int"

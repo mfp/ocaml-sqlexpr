@@ -98,6 +98,9 @@ open Directives
 
 module Sqlexpr =
 struct
+  module Directives = Directives
+  module Conversion = Conversion
+
   type ('a, 'b) statement = ('a, 'b) Directives.statement
 
   type ('a, 'b, 'c) expression = {
@@ -234,28 +237,26 @@ struct
          in loop init)
       db
       expr.statement
+
+  let new_tx_id =
+    let pid = Unix.getpid () in
+    let n = ref 0 in
+      fun () -> incr n; sprintf "__sqlexpr_sqlite_tx_%d_%d" pid !n
+
+  let unsafe_execute db fmt =
+    ksprintf (fun sql -> check_ok (Sqlite3.exec db) sql) fmt
+
+  let transaction db f =
+    let txid = new_tx_id () in
+      unsafe_execute db "SAVEPOINT %s" txid;
+      try
+        let x = f db in
+          unsafe_execute db "RELEASE %s" txid;
+          x
+      with e ->
+        unsafe_execute db "ROLLBACK TO %s" txid;
+        raise e
 end
-
-include Sqlexpr
-
-let new_tx_id =
-  let pid = Unix.getpid () in
-  let n = ref 0 in
-    fun () -> incr n; sprintf "__sqlexpr_sqlite_tx_%d_%d" pid !n
-
-let unsafe_execute db fmt =
-  ksprintf (fun sql -> check_ok (Sqlite3.exec db) sql) fmt
-
-let transaction db f =
-  let txid = new_tx_id () in
-    unsafe_execute db "SAVEPOINT %s" txid;
-    try
-      let x = f db in
-        unsafe_execute db "RELEASE %s" txid;
-        x
-    with e ->
-      unsafe_execute db "ROLLBACK TO %s" txid;
-      raise e
 
 module Monadic(M : sig
                  type 'a t
@@ -269,6 +270,7 @@ module Monadic(M : sig
 struct
   module Lwt = M
   open Lwt
+  open Sqlexpr
 
   let (>>=) = bind
 
