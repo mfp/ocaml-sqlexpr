@@ -270,8 +270,9 @@ struct
         lwt x = f db in
           unsafe_execute db "RELEASE %s" txid >>
           return x
-      finally
-        unsafe_execute db "ROLLBACK TO %s" txid
+      with e ->
+        unsafe_execute db "ROLLBACK TO %s" txid >>
+        fail e
 
   let (>>=) = bind
 
