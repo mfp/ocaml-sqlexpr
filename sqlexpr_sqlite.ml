@@ -155,7 +155,7 @@ struct
   let make_expression stmt n f = { statement = stmt; get_data = (n, f) }
 
   let check_ok f x = match f x with
-      Sqlite3.Rc.OK -> return ()
+      Sqlite3.Rc.OK | Sqlite3.Rc.DONE -> return ()
     | code -> raise_error code
 
   let prepare db f (params, nparams, sql, prep) =
