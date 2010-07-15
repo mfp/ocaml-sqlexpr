@@ -6,6 +6,8 @@ exception Sqlite_error of string * Sqlite3.Rc.t
 val open_db : string -> db
 val close_db : db -> unit
 
+val sqlite_db : db -> Sqlite3.db
+
 module Make(M : Sqlexpr_concurrency.THREAD) :
 sig
   module Directives :

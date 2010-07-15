@@ -14,6 +14,8 @@ let close_db db =
     ignore (Sqlite3.db_close db)
   with Sqlite3.Error _ -> ()
 
+let sqlite_db db = db
+
 module type THREAD = Sqlexpr_concurrency.THREAD
 
 module Error(M : THREAD) =
