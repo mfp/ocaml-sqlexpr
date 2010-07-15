@@ -7,6 +7,17 @@ exception Sqlite_error of string * Sqlite3.Rc.t
 
 type db = Sqlite3.db
 
+let () =
+  Printexc.register_printer
+    (function
+       | Error exn ->
+           Some (sprintf "Sqlexpr_sqlite.Error %s"
+                   (Printexc.to_string exn))
+       | Sqlite_error (s, rc) ->
+           Some (sprintf "Sqlexpr_sqlite.Sqlite_error (%S, %s)"
+                   s (Sqlite3.Rc.to_string rc))
+       | _ -> None)
+
 let open_db fname = Sqlite3.db_open fname
 
 let close_db db =
