@@ -10,20 +10,21 @@ type input_type = [output_type | `Any]
 
 type element =
     Literal of string
-  | Input of input_type
+  | Input of input_type * bool (* nullable *)
   | Output of string * output_type * bool (* nullable *)
 
 let rec parse l = do_parse [] l
 
+
 and do_parse acc = function
-    Cons (_, '%', Cons (_, 'd', l)) -> do_parse (Input `Int :: acc) l
-  | Cons (_, '%', Cons (_, 'l', l)) -> do_parse (Input `Int32 :: acc) l
-  | Cons (_, '%', Cons (_, 'L', l)) -> do_parse (Input `Int64 :: acc) l
-  | Cons (_, '%', Cons (_, 's', l)) -> do_parse (Input `Text :: acc) l
-  | Cons (_, '%', Cons (_, 'S', l)) -> do_parse (Input `Blob :: acc) l
-  | Cons (_, '%', Cons (_, 'f', l)) -> do_parse (Input `Float :: acc) l
-  | Cons (_, '%', Cons (_, 'b', l)) -> do_parse (Input `Bool :: acc) l
-  | Cons (_, '%', Cons (_, 'a', l)) -> do_parse (Input `Any :: acc) l
+    Cons (_, '%', Cons (_, 'd', l)) -> do_parse_in acc `Int l
+  | Cons (_, '%', Cons (_, 'l', l)) -> do_parse_in acc `Int32 l
+  | Cons (_, '%', Cons (_, 'L', l)) -> do_parse_in acc `Int64 l
+  | Cons (_, '%', Cons (_, 's', l)) -> do_parse_in acc `Text l
+  | Cons (_, '%', Cons (_, 'S', l)) -> do_parse_in acc `Blob l
+  | Cons (_, '%', Cons (_, 'f', l)) -> do_parse_in acc `Float l
+  | Cons (_, '%', Cons (_, 'b', l)) -> do_parse_in acc `Bool l
+  | Cons (_, '%', Cons (_, 'a', l)) -> do_parse_in acc `Any l
   | Cons (_, '%', Cons (_, '%', l)) -> begin
       match acc with
           Literal s :: tl -> do_parse (Literal (s ^ "%") :: tl) l
@@ -49,6 +50,10 @@ and do_parse acc = function
     end
   | Nil _ -> List.rev acc
 
+and do_parse_in acc kind = function
+  | Cons (_, '?', l) -> do_parse (Input (kind, true) :: acc) l
+  | l -> do_parse (Input (kind, false) :: acc) l
+
 and do_parse_out kind acc = function
     Cons (_, '?', Cons (loc, '{', l)) ->
       read_expr acc loc true kind l
@@ -69,15 +74,22 @@ let new_id =
       incr n;
       sprintf "__pa_sql_%d" !n
 
+let input_directive_id kind nullable =
+  let s = match kind with
+      `Int -> "int"
+    | `Int32 -> "int32"
+    | `Int64 -> "int64"
+    | `Text -> "text"
+    | `Blob -> "blob"
+    | `Float -> "float"
+    | `Bool -> "bool"
+    | `Any -> "any"
+  in if nullable then "maybe_" ^ s else s
+
 let directive_expr ?(_loc = Loc.ghost) = function
-    Input `Int -> <:expr< Sqlexpr.Directives.int >>
-  | Input `Int32 -> <:expr< Sqlexpr.Directives.int32 >>
-  | Input `Int64 -> <:expr< Sqlexpr.Directives.int64 >>
-  | Input `Text -> <:expr< Sqlexpr.Directives.text >>
-  | Input `Blob -> <:expr< Sqlexpr.Directives.blob >>
-  | Input `Float -> <:expr< Sqlexpr.Directives.float >>
-  | Input `Bool -> <:expr< Sqlexpr.Directives.bool >>
-  | Input `Any -> <:expr< Sqlexpr.Directives.any >>
+    Input (kind, nullable) ->
+      let id = input_directive_id kind nullable in
+        <:expr< Sqlexpr.Directives.$lid:id$ >>
   | Literal s -> <:expr< Sqlexpr.Directives.literal $str:s$ >>
   | Output _ -> assert false
 
