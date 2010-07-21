@@ -24,6 +24,15 @@ sig
     val int64 : (int64 -> 'a, 'a) directive
     val bool : (bool -> 'a, 'a) directive
     val any : (('b -> string) -> 'b -> 'a, 'a) directive
+
+    val maybe_int : (int option -> 'a, 'a) directive
+    val maybe_text : (string option -> 'a, 'a) directive
+    val maybe_blob : (string option -> 'a, 'a) directive
+    val maybe_float : (float option -> 'a, 'a) directive
+    val maybe_int32 : (int32 option -> 'a, 'a) directive
+    val maybe_int64 : (int64 option -> 'a, 'a) directive
+    val maybe_bool : (bool option -> 'a, 'a) directive
+    val maybe_any : (('b -> string) -> 'b option -> 'a, 'a) directive
   end
 
   module Conversion :

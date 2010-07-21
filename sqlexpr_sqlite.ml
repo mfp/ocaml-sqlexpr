@@ -41,6 +41,8 @@ end
 
 module Directives =
 struct
+  module D = Sqlite3.Data
+
   type st = (Sqlite3.Data.t list * int * string * Sqlite3.stmt option ref option)
 
   and ('a, 'b) statement =
@@ -58,21 +60,44 @@ struct
   let param f k (params, nparams, sql, prep) x =
     k (f x :: params, nparams + 1, sql, prep)
 
-  let int k st n = param (fun n -> Sqlite3.Data.INT (Int64.of_int n)) k st n
+  let int k st n = param (fun n -> D.INT (Int64.of_int n)) k st n
 
-  let int64 k st n = param (fun n -> Sqlite3.Data.INT n) k st n
+  let int64 k st n = param (fun n -> D.INT n) k st n
 
-  let int32 k st n = param (fun n -> Sqlite3.Data.INT (Int64.of_int32 n)) k st n
+  let int32 k st n = param (fun n -> D.INT (Int64.of_int32 n)) k st n
 
-  let text k st s = param (fun n -> Sqlite3.Data.TEXT s) k st s
+  let text k st s = param (fun s -> D.TEXT s) k st s
 
-  let blob k st s = param (fun n -> Sqlite3.Data.BLOB s) k st s
+  let blob k st s = param (fun s -> D.BLOB s) k st s
 
-  let float k st f = param (fun n -> Sqlite3.Data.FLOAT f) k st f
+  let float k st f = param (fun f -> D.FLOAT f) k st f
 
-  let bool k st b = param (fun b -> Sqlite3.Data.INT (if b then 1L else 0L)) k st b
+  let bool k st b = param (fun b -> D.INT (if b then 1L else 0L)) k st b
 
   let any k st f x = blob k st (f x)
+
+  let maybe_int k st n =
+    param (Option.map_default (fun n -> D.INT (Int64.of_int n)) D.NULL) k st n
+
+  let maybe_int32 k st n =
+    param (Option.map_default (fun n -> D.INT (Int64.of_int32 n)) D.NULL) k st n
+
+  let maybe_int64 k st n =
+    param (Option.map_default (fun n -> D.INT n) D.NULL) k st n
+
+  let maybe_text k st s =
+    param (Option.map_default (fun s -> D.TEXT s) D.NULL) k st s
+
+  let maybe_blob k st s =
+    param (Option.map_default (fun s -> D.BLOB s) D.NULL) k st s
+
+  let maybe_float k st f =
+    param (Option.map_default (fun f -> D.FLOAT f) D.NULL) k st f
+
+  let maybe_bool k st b =
+    param (Option.map_default (fun b -> D.INT (if b then 1L else 0L)) D.NULL) k st b
+
+  let maybe_any k st f x = maybe_blob k st (Option.map f x)
 end
 
 module MkConversion(M : THREAD) =
