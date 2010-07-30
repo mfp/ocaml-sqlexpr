@@ -8,29 +8,52 @@ type output_type =
 
 type input_type = [output_type | `Any]
 
-type element =
-    Literal of string
-  | Input of input_type * bool (* nullable *)
-  | Output of element list * output_type * bool (* nullable *)
+type no_output_element = [ `Literal of string | `Input of input_type * bool ]
 
-let rec parse l = do_parse [] l
+type sql_element =
+    [ no_output_element
+    | `Output of no_output_element list * output_type * bool (* nullable *) ]
 
-and do_parse acc = function
-    Cons (_, '%', Cons (_, 'd', l)) -> do_parse_in acc `Int l
-  | Cons (_, '%', Cons (_, 'l', l)) -> do_parse_in acc `Int32 l
-  | Cons (_, '%', Cons (_, 'L', l)) -> do_parse_in acc `Int64 l
-  | Cons (_, '%', Cons (_, 's', l)) -> do_parse_in acc `Text l
-  | Cons (_, '%', Cons (_, 'S', l)) -> do_parse_in acc `Blob l
-  | Cons (_, '%', Cons (_, 'f', l)) -> do_parse_in acc `Float l
-  | Cons (_, '%', Cons (_, 'b', l)) -> do_parse_in acc `Bool l
-  | Cons (_, '%', Cons (_, 'a', l)) -> do_parse_in acc `Any l
+(* [parse_without_output_exprs continuation acc llist]
+ * parse %x(?) and %%, but don't recognize @x{} expressions, passing a list
+ * of no_output_elements to the continuation (used for open recursion). *)
+let rec parse_without_output_exprs k acc = function
+    Cons (_, '%', Cons (_, 'd', l)) -> do_parse_in k acc `Int l
+  | Cons (_, '%', Cons (_, 'l', l)) -> do_parse_in k acc `Int32 l
+  | Cons (_, '%', Cons (_, 'L', l)) -> do_parse_in k acc `Int64 l
+  | Cons (_, '%', Cons (_, 's', l)) -> do_parse_in k acc `Text l
+  | Cons (_, '%', Cons (_, 'S', l)) -> do_parse_in k acc `Blob l
+  | Cons (_, '%', Cons (_, 'f', l)) -> do_parse_in k acc `Float l
+  | Cons (_, '%', Cons (_, 'b', l)) -> do_parse_in k acc `Bool l
+  | Cons (_, '%', Cons (_, 'a', l)) -> do_parse_in k acc `Any l
   | Cons (_, '%', Cons (_, '%', l)) -> begin
       match acc with
-          Literal s :: tl -> do_parse (Literal (s ^ "%") :: tl) l
-        | tl -> do_parse (Literal "%" :: tl) l
+          `Literal s :: tl -> k (`Literal (s ^ "%") :: tl) l
+        | tl -> k (`Literal "%" :: tl) l
     end
   | Cons (_, '%', Cons (loc, c, l)) ->
       Loc.raise loc (Failure (sprintf "Unknown input directive %C" c))
+  | Cons (_, c, l) -> begin match acc with
+        `Literal s :: tl -> k (`Literal (s ^ String.make 1 c) :: tl) l
+      | tl -> k (`Literal (String.make 1 c) :: tl) l
+    end
+  | Nil _ -> List.rev acc
+
+(* complete the `Input sql_element, recognizing the ? that indicates it's
+ * nullable, if present *)
+and do_parse_in k acc kind = function
+  | Cons (_, '?', l) -> k (`Input (kind, true) :: acc) l
+  | l -> k (`Input (kind, false) :: acc) l
+
+(* @return list of [sql_elements] given a llist *)
+let rec parse l : sql_element list = do_parse [] l
+
+and do_parse acc l = parse_with_output_exprs acc l
+
+(* like [parse_with_output_exprs] but also recognize @x{...}, returning
+ * a list of [sql_element]s. Need not use open recursion here, because the
+ * continuation will always be [do_parse]. *)
+and parse_with_output_exprs acc = function
   | Cons (_, '@', Cons (_, 'd', l)) -> do_parse_out `Int acc l
   | Cons (_, '@', Cons (_, 'l', l)) -> do_parse_out `Int32 acc l
   | Cons (_, '@', Cons (_, 'L', l)) -> do_parse_out `Int64 acc l
@@ -38,21 +61,15 @@ and do_parse acc = function
   | Cons (_, '@', Cons (_, 'S', l)) -> do_parse_out `Blob acc l
   | Cons (_, '@', Cons (_, 'f', l)) -> do_parse_out `Float acc l
   | Cons (_, '@', Cons (_, '@', l)) -> begin match acc with
-        Literal s :: tl -> do_parse (Literal (s ^ "@") :: tl) l
-      | tl -> do_parse (Literal "@" :: tl) l
+        `Literal s :: tl -> do_parse (`Literal (s ^ "@") :: tl) l
+      | tl -> do_parse (`Literal "@" :: tl) l
     end
   | Cons (_, '@', Cons (loc, c, l)) ->
       Loc.raise loc (Failure (sprintf "Unknown output directive %C" c))
-  | Cons (_, c, l) -> begin match acc with
-        Literal s :: tl -> do_parse (Literal (s ^ String.make 1 c) :: tl) l
-      | tl -> do_parse (Literal (String.make 1 c) :: tl) l
-    end
-  | Nil _ -> List.rev acc
+  | l -> parse_without_output_exprs do_parse acc l
 
-and do_parse_in acc kind = function
-  | Cons (_, '?', l) -> do_parse (Input (kind, true) :: acc) l
-  | l -> do_parse (Input (kind, false) :: acc) l
-
+(* read the trailing ? and { after a @x output expression delimiter, then read
+ * the expression up to the next } *)
 and do_parse_out kind acc = function
     Cons (_, '?', Cons (loc, '{', l)) ->
       read_expr acc loc true kind l
@@ -61,10 +78,14 @@ and do_parse_out kind acc = function
   | Cons (loc, _, _) | Nil loc ->
       Loc.raise loc (Failure "Missing expression for output directive")
 
+(* read the output expression up to the trailing '}'. Disallow output
+ * expressions when parsing the inner expression. *)
 and read_expr acc loc ?(text = "") nullable kind = function
     Cons (_, '}', l) ->
-      let elm = parse (unescape loc text) in
-        do_parse (Output (elm, kind, nullable) :: acc) l
+      let rec parse_output_expr acc l =
+        parse_without_output_exprs parse_output_expr acc l in
+      let elms : no_output_element list = parse_output_expr [] (unescape loc text) in
+        do_parse (`Output (elms, kind, nullable) :: acc) l
   | Cons (_, c, l) -> read_expr acc loc ~text:(sprintf "%s%c" text c) nullable kind l
   | Nil _ ->
       Loc.raise loc (Failure "Unterminated output directive expression")
@@ -88,40 +109,41 @@ let input_directive_id kind nullable =
   in if nullable then "maybe_" ^ s else s
 
 let directive_expr ?(_loc = Loc.ghost) = function
-    Input (kind, nullable) ->
+    `Input (kind, nullable) ->
       let id = input_directive_id kind nullable in
         <:expr< Sqlexpr.Directives.$lid:id$ >>
-  | Literal s -> <:expr< Sqlexpr.Directives.literal $str:s$ >>
-  | Output _ -> assert false
+  | `Literal s -> <:expr< Sqlexpr.Directives.literal $str:s$ >>
 
 let sql_statement l =
   let b = Buffer.create 10 in
   let rec append_text = function
-      Input _ -> Buffer.add_char b '?'
-    | Literal s -> Buffer.add_string b s
-    | Output (l, _, _) -> List.iter append_text l
+      `Input _ -> Buffer.add_char b '?'
+    | `Literal s -> Buffer.add_string b s
   in
     List.iter append_text l;
     Buffer.contents b
 
-let create_sql_statement _loc ~cacheable sql =
+let concat_map f l = List.concat (List.map f l)
+
+let expand_output_elms = function
+  | `Output (l, _, _) -> l
+  | #no_output_element as d -> [d]
+
+let create_sql_statement _loc ~cacheable sql_elms =
+  let sql_elms = concat_map expand_output_elms sql_elms in
   let k = new_id () in
   let st = new_id () in
   let exp =
     List.fold_right
-      (fun dir e -> <:expr< $directive_expr dir$ $e$ >>) sql <:expr< $lid:k$ >> in
+      (fun dir e -> <:expr< $directive_expr dir$ $e$ >>) sql_elms <:expr< $lid:k$ >> in
   let cacheable = if cacheable then <:expr< True >> else <:expr< False >> in
     <:expr<
       Sqlexpr.make_statement ~cacheable:$cacheable$
-      $str:sql_statement sql$
+      $str:sql_statement sql_elms$
       (fun [$lid:k$ -> fun [$lid:st$ -> $exp$ $lid:st$]]) >>
 
-let concat_map f l = List.concat (List.map f l)
-
-let create_sql_expression _loc ~cacheable sql =
-  let statement =
-    create_sql_statement _loc ~cacheable
-      (concat_map (function Output (l, _, _) -> l | d -> [d]) sql) in
+let create_sql_expression _loc ~cacheable (sql_elms : sql_element list) =
+  let statement = create_sql_statement _loc ~cacheable sql_elms in
 
   let conv_expr kind nullable e =
     let expr x =
@@ -140,14 +162,14 @@ let create_sql_expression _loc ~cacheable sql =
   let id = new_id () in
   let conv_exprs =
     let n = ref 0 in
-      List.map
+      concat_map
         (fun dir -> match dir with
-             Output (_, kind, nullable) ->
+             `Output (_, kind, nullable) ->
                let i = string_of_int !n in
                  incr n;
-                 conv_expr kind nullable <:expr< $lid:id$.($int:i$) >>
-           | _ -> assert false)
-        (List.filter (function Output _ -> true | _ -> false) sql) in
+                 [ conv_expr kind nullable <:expr< $lid:id$.($int:i$) >> ]
+           | _ -> [])
+        sql_elms in
   let tuple_func =
     let e = match conv_exprs with
         [] -> assert false
@@ -162,11 +184,11 @@ let create_sql_expression _loc ~cacheable sql =
         $tuple_func$ >>
 
 let expand_sql_literal ~cacheable ctx _loc str =
-  let sql = parse (unescape _loc str) in
-    if List.exists (function Output _ -> true | _ -> false) sql then
-      create_sql_expression _loc ~cacheable sql
+  let sql_elms = parse (unescape _loc str) in
+    if List.exists (function `Output _ -> true | _ -> false) sql_elms then
+      create_sql_expression _loc ~cacheable sql_elms
     else
-      create_sql_statement _loc ~cacheable sql
+      create_sql_statement _loc ~cacheable sql_elms
 
 let _ =
   register_expr_specifier "sql"
