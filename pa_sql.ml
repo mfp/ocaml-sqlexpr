@@ -11,10 +11,9 @@ type input_type = [output_type | `Any]
 type element =
     Literal of string
   | Input of input_type * bool (* nullable *)
-  | Output of string * output_type * bool (* nullable *)
+  | Output of element list * output_type * bool (* nullable *)
 
 let rec parse l = do_parse [] l
-
 
 and do_parse acc = function
     Cons (_, '%', Cons (_, 'd', l)) -> do_parse_in acc `Int l
@@ -62,9 +61,11 @@ and do_parse_out kind acc = function
   | Cons (loc, _, _) | Nil loc ->
       Loc.raise loc (Failure "Missing expression for output directive")
 
-and read_expr acc loc ?(name = "") nullable kind = function
-    Cons (_, '}', l) -> do_parse (Output (name, kind, nullable) :: acc) l
-  | Cons (_, c, l) -> read_expr acc loc ~name:(sprintf "%s%c" name c) nullable kind l
+and read_expr acc loc ?(text = "") nullable kind = function
+    Cons (_, '}', l) ->
+      let elm = parse (unescape loc text) in
+        do_parse (Output (elm, kind, nullable) :: acc) l
+  | Cons (_, c, l) -> read_expr acc loc ~text:(sprintf "%s%c" text c) nullable kind l
   | Nil _ ->
       Loc.raise loc (Failure "Unterminated output directive expression")
 
@@ -95,11 +96,12 @@ let directive_expr ?(_loc = Loc.ghost) = function
 
 let sql_statement l =
   let b = Buffer.create 10 in
-    List.iter
-      (function
-           Input _ -> Buffer.add_char b '?'
-         | Literal s | Output (s, _, _) -> Buffer.add_string b s)
-      l;
+  let rec append_text = function
+      Input _ -> Buffer.add_char b '?'
+    | Literal s -> Buffer.add_string b s
+    | Output (l, _, _) -> List.iter append_text l
+  in
+    List.iter append_text l;
     Buffer.contents b
 
 let create_sql_statement _loc ~cacheable sql =
@@ -114,10 +116,12 @@ let create_sql_statement _loc ~cacheable sql =
       $str:sql_statement sql$
       (fun [$lid:k$ -> fun [$lid:st$ -> $exp$ $lid:st$]]) >>
 
+let concat_map f l = List.concat (List.map f l)
+
 let create_sql_expression _loc ~cacheable sql =
   let statement =
     create_sql_statement _loc ~cacheable
-      (List.map (function Output (s, _, _) -> Literal s | d -> d) sql) in
+      (concat_map (function Output (l, _, _) -> l | d -> [d]) sql) in
 
   let conv_expr kind nullable e =
     let expr x =
