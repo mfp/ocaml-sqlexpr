@@ -82,6 +82,20 @@ let test_oexpr fmt insert expr l () =
             l l')
     ()
 
+let test_nullable_oexpr fmt insert expr l () =
+  with_db
+    (fun db () ->
+       let n = ref 1 in
+         insert db l;
+         let l = List.map (fun x -> let i = !n in incr n; (i, Some x)) l in
+         let l' = List.sort compare (S.select db expr) in
+           aeq_list
+             ~printer:(fun (id, x) -> match x with
+                           None -> sprintf "(%d, None)" id
+                         | Some x -> sprintf ("(%d, Some " ^^ fmt ^^ ")") id x)
+            l l')
+    ()
+
 let test_oexpr_directives =
   with_db
     (fun db () ->
@@ -102,6 +116,7 @@ let test_directives =
 
 let test_outputs =
   let t = test_oexpr in
+  let tn = test_nullable_oexpr in
     [
       "%d" >:: t "%d" insert_d sql"SELECT @d{id}, @d{v} FROM foo" [1;-1;3;4];
       "%l" >:: t "%ld" insert_l sql"SELECT @d{id}, @l{v} FROM foo" [1l;-1l;3l;4l];
@@ -110,6 +125,15 @@ let test_outputs =
       "%s" >:: t "%s" insert_s sql"SELECT @d{id}, @s{v} FROM foo" ["foo"; "bar"; "baz"];
       "%S" >:: t "%S" insert_s sql"SELECT @d{id}, @S{v} FROM foo" ["foo"; "bar"; "baz"];
       "%b" >:: t "%b" insert_b sql"SELECT @d{id}, @b{v} FROM foo" [true; false];
+
+      (* nullable *)
+      "%d" >:: tn "%d" insert_d sql"SELECT @d{id}, @d?{v} FROM foo" [1;-1;3;4];
+      "%l" >:: tn "%ld" insert_l sql"SELECT @d{id}, @l?{v} FROM foo" [1l;-1l;3l;4l];
+      "%L" >:: tn "%Ld" insert_L sql"SELECT @d{id}, @L?{v} FROM foo" [1L;-1L;3L;4L];
+      "%f" >:: tn "%f" insert_f sql"SELECT @d{id}, @f?{v} FROM foo" [1.;-1.; 10.; 1e2];
+      "%s" >:: tn "%s" insert_s sql"SELECT @d{id}, @s?{v} FROM foo" ["foo"; "bar"; "baz"];
+      "%S" >:: tn "%S" insert_s sql"SELECT @d{id}, @S?{v} FROM foo" ["foo"; "bar"; "baz"];
+      "%b" >:: tn "%b" insert_b sql"SELECT @d{id}, @b?{v} FROM foo" [true; false];
     ]
 
 
