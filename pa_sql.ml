@@ -60,6 +60,7 @@ and parse_with_output_exprs acc = function
   | Cons (_, '@', Cons (_, 's', l)) -> do_parse_out `Text acc l
   | Cons (_, '@', Cons (_, 'S', l)) -> do_parse_out `Blob acc l
   | Cons (_, '@', Cons (_, 'f', l)) -> do_parse_out `Float acc l
+  | Cons (_, '@', Cons (_, 'b', l)) -> do_parse_out `Bool acc l
   | Cons (_, '@', Cons (_, '@', l)) -> begin match acc with
         `Literal s :: tl -> do_parse (`Literal (s ^ "@") :: tl) l
       | tl -> do_parse (`Literal "@" :: tl) l

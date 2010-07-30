@@ -109,7 +109,7 @@ let test_outputs =
       "%f" >:: t "%f" insert_f sql"SELECT @d{id}, @f{v} FROM foo" [1.;-1.; 10.; 1e2];
       "%s" >:: t "%s" insert_s sql"SELECT @d{id}, @s{v} FROM foo" ["foo"; "bar"; "baz"];
       "%S" >:: t "%S" insert_s sql"SELECT @d{id}, @S{v} FROM foo" ["foo"; "bar"; "baz"];
-      (* "%b" >:: t "%b" insert_b sql"SELECT @d{id}, @b{v} FROM foo" [true; false]; *)
+      "%b" >:: t "%b" insert_b sql"SELECT @d{id}, @b{v} FROM foo" [true; false];
     ]
 
 
