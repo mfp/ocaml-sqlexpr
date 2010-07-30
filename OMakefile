@@ -23,7 +23,17 @@ OCAMLFINDFLAGS += -syntax camlp4o -ppopt pa_sql.cmo
 
 OCamlLibrary(sqlexpr, sqlexpr_concurrency sqlexpr_sqlite)
 
+section
+    OCAMLPACKS[] += oUnit
+    OCAML_LIBS[] += sqlexpr
+    OCamlProgram(t_sqlexpr_sqlite, t_sqlexpr_sqlite)
+    $(addsuffixes .o .cmx .cmi .cmo, t_sqlexpr_sqlite):
+
 .DEFAULT: pa_sql.cmo sqlexpr.cma sqlexpr.cmxa
+
+.PHONY: test
+test: t_sqlexpr_sqlite
+	./t_sqlexpr_sqlite
 
 .PHONY: clean
 
