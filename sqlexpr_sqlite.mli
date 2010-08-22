@@ -73,12 +73,10 @@ sig
   val select : db -> ('c, 'a M.t, 'a list M.t) expression -> 'c
   val select_one : db -> ('c, 'a M.t, 'a M.t) expression -> 'c
 
-  val transaction : db -> (db -> unit M.t) -> unit M.t
+  val transaction : db -> (db -> 'a M.t) -> 'a M.t
 
   val fold :
     db -> ('a -> 'b -> 'a M.t) -> 'a -> ('c, 'b, 'a M.t) expression -> 'c
   val iter : db -> ('a -> unit M.t) -> ('b, 'a, unit M.t) expression -> 'b
-
-  val transaction : db -> (db -> unit M.t) -> unit M.t
 end
 
