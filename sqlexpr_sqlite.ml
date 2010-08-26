@@ -162,7 +162,7 @@ struct
 
   let profile_ch =
     try
-      Some (open_out_gen [Open_append; Open_creat; Open_binary] 0x644
+      Some (open_out_gen [Open_append; Open_creat; Open_binary] 0o644
               (Unix.getenv "OCAML_SQLEXPR_PROFILE"))
     with Not_found -> None
 
