@@ -166,19 +166,24 @@ struct
               (Unix.getenv "OCAML_SQLEXPR_PROFILE"))
     with Not_found -> None
 
+  let prettify_sql_stmt sql =
+    let sql = String.copy sql in
+      for i = 0 to String.length sql - 1 do
+        match sql.[i] with
+            '\r' | '\n' | '\t' -> sql.[i] <- ' '
+              | _ -> ()
+      done;
+      sql
+
   let profile sql f =
     match profile_ch with
         None -> f ()
       | Some ch ->
+          let sql = prettify_sql_stmt sql in
           let t0 = Unix.gettimeofday () in
+          Printf.fprintf ch "XXX\t%s\n%!" sql;
           let y = f () in
           let dt = Unix.gettimeofday () -. t0 in
-          let sql = String.copy sql in
-            for i = 0 to String.length sql - 1 do
-              match sql.[i] with
-                  '\r' | '\n' | '\t' -> sql.[i] <- ' '
-                | _ -> ()
-            done;
             Printf.fprintf ch "%8.6f\t%s\n%!" dt sql;
             y
 
