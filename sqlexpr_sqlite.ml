@@ -179,7 +179,7 @@ struct
                   '\r' | '\n' | '\t' -> sql.[i] <- ' '
                 | _ -> ()
             done;
-            Printf.fprintf ch "%8.6f\t%s\n" dt sql;
+            Printf.fprintf ch "%8.6f\t%s\n%!" dt sql;
             y
 
   let make_statement ~cacheable sql directive =
@@ -299,7 +299,7 @@ struct
       fun () -> incr n; sprintf "__sqlexpr_sqlite_tx_%d_%d" pid !n
 
   let unsafe_execute db fmt =
-    ksprintf (fun sql -> check_ok (Sqlite3.exec db) sql) fmt
+    ksprintf (fun sql -> profile sql (fun () -> check_ok (Sqlite3.exec db) sql)) fmt
 
   let transaction db f =
     let txid = new_tx_id () in
