@@ -12,3 +12,4 @@
 .*swp
 *.s
 gmon.out
+/t_sqlexpr_sqlite
