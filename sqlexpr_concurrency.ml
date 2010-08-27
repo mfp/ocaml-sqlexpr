@@ -7,6 +7,8 @@ sig
   val fail : exn -> 'a t
   val catch : (unit -> 'a t) -> (exn -> 'a t) -> 'a t
   val finalize : (unit -> 'a t) -> (unit -> 'a t) -> 'a t
+  val sleep : float -> unit t
+  val auto_yield : float -> (unit -> unit t)
 end
 
 module Id =
@@ -22,4 +24,8 @@ struct
     match try `Ok (f ()) with e -> `Exn e with
         `Ok x -> g (); x
       | `Exn e -> g (); raise e
+
+  let sleep dt = let _, _, _ = Unix.select [] [] [] dt in ()
+
+  let auto_yield _ = (fun () -> ())
 end
