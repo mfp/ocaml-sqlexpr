@@ -191,8 +191,11 @@ struct
       | Some ch ->
           let sql = prettify_sql_stmt sql in
           let t0 = Unix.gettimeofday () in
-          Printf.fprintf ch "XXX\t%s with params %s\n%!"
-            sql (string_of_params (List.rev params));
+          begin match params with
+              [] -> Printf.fprintf ch "XXX\t%s\n%!" sql
+            | l -> Printf.fprintf ch "XXX\t%s with params %s\n%!"
+                     sql (string_of_params (List.rev l))
+          end;
           let y = f () in
           let dt = Unix.gettimeofday () -. t0 in
             Printf.fprintf ch "%8.6f\t%s\n%!" dt sql;
