@@ -213,12 +213,14 @@ struct
 
   let sleep dt = let _, _, _ = Unix.select [] [] [] dt in ()
 
-  let rec check_ok f x = match f x with
+  let rec check_ok ?stmt f x = match f x with
       Sqlite3.Rc.OK | Sqlite3.Rc.DONE -> return ()
     | Sqlite3.Rc.BUSY ->
         sleep 0.002; (* FIXME: use the monad's sleep *)
         check_ok f x
-    | code -> raise_error code
+    | code ->
+        Option.may (fun stmt -> ignore (Sqlite3.reset stmt)) stmt;
+        raise_error code
 
   let prepare db f (params, nparams, sql, prep) =
     lwt stmt =
@@ -226,7 +228,7 @@ struct
         match prep with
             None -> return (Sqlite3.prepare db sql)
           | Some r -> match !r with
-                Some stmt -> check_ok Sqlite3.reset stmt >> return stmt
+                Some stmt -> check_ok ~stmt Sqlite3.reset stmt >> return stmt
               | None ->
                   let stmt = Sqlite3.prepare db sql in
                     r := Some stmt;
@@ -238,7 +240,7 @@ struct
       | hd :: tl -> f i hd >> iteri ~i:(i + 1) f tl
     in
       (* the list of params is reversed *)
-      iteri (fun n v -> check_ok (Sqlite3.bind stmt (nparams - n)) v) params >>
+      iteri (fun n v -> check_ok ~stmt (Sqlite3.bind stmt (nparams - n)) v) params >>
       profile sql ~params (fun () -> f stmt)
 
   let do_select f db p =
@@ -247,11 +249,11 @@ struct
        if p.cacheable then Some p.prepared_statement else None)
 
   let execute db (p : ('a, unit M.t) statement) =
-    do_select (fun stmt -> check_ok Sqlite3.step stmt) db p
+    do_select (fun stmt -> check_ok ~stmt Sqlite3.step stmt) db p
 
   let insert db p =
     do_select
-      (fun stmt -> check_ok Sqlite3.step stmt >> return (Sqlite3.last_insert_rowid db))
+      (fun stmt -> check_ok ~stmt Sqlite3.step stmt >> return (Sqlite3.last_insert_rowid db))
       db p
 
   let check_num_cols s stmt expr =
