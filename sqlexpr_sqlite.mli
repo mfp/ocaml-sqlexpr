@@ -71,6 +71,8 @@ sig
 
   val select_f : db -> ('a -> 'b M.t) -> ('c, 'a, 'b list M.t) expression -> 'c
   val select : db -> ('c, 'a M.t, 'a list M.t) expression -> 'c
+
+  (** @raise Not_found if no row is found *)
   val select_one : db -> ('c, 'a M.t, 'a M.t) expression -> 'c
 
   val transaction : db -> (db -> 'a M.t) -> 'a M.t

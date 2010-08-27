@@ -282,6 +282,7 @@ struct
       (fun stmt ->
          match Sqlite3.step stmt with
              Sqlite3.Rc.ROW -> snd expr.get_data (Sqlite3.row_data stmt)
+           | Sqlite3.Rc.DONE -> M.fail Not_found
            | rc -> raise_error rc)
       db
       expr.statement
