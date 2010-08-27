@@ -261,6 +261,13 @@ struct
           "Sqlexpr_sqlite.%s: wrong number of columns \
            (expected %d, got %d)" s expected actual
 
+  let ensure_reset_stmt stmt f x =
+    try_lwt
+      f x
+    finally
+      ignore (Sqlite3.reset stmt);
+      return ()
+
   let select_f db f expr =
     do_select
       (fun stmt ->
@@ -268,17 +275,11 @@ struct
            match Sqlite3.step stmt with
                Sqlite3.Rc.ROW ->
                  check_num_cols "select" stmt expr >>
-                 lwt x =
-                   try_lwt
-                     f (snd expr.get_data (Sqlite3.row_data stmt))
-                   with e -> ignore (Sqlite3.reset stmt); fail e
-                 in
+                 lwt x = f (snd expr.get_data (Sqlite3.row_data stmt)) in
                    loop (x :: l)
              | Sqlite3.Rc.DONE -> return (List.rev l)
-             | rc ->
-                 ignore (Sqlite3.reset stmt);
-                 raise_error rc
-         in loop [])
+             | rc -> raise_error rc
+         in ensure_reset_stmt stmt loop [])
       db
       expr.statement
 
@@ -287,17 +288,12 @@ struct
   let select_one db expr =
     do_select
       (fun stmt ->
-         match Sqlite3.step stmt with
-             Sqlite3.Rc.ROW ->
-               try_lwt
-                 snd expr.get_data (Sqlite3.row_data stmt)
-               finally
-                 ignore (Sqlite3.reset stmt);
-                 return ()
-           | Sqlite3.Rc.DONE -> M.fail Not_found
-           | rc ->
-               ignore (Sqlite3.reset stmt);
-               raise_error rc)
+         ensure_reset_stmt stmt begin fun () ->
+           match Sqlite3.step stmt with
+               Sqlite3.Rc.ROW -> snd expr.get_data (Sqlite3.row_data stmt)
+             | Sqlite3.Rc.DONE -> M.fail Not_found
+             | rc -> raise_error rc
+         end ())
       db
       expr.statement
 
@@ -332,15 +328,10 @@ struct
                  begin try_lwt
                    check_num_cols "fold" stmt expr >>
                    f init (snd expr.get_data (Sqlite3.row_data stmt))
-                 with e ->
-                   ignore (Sqlite3.reset stmt);
-                   fail e
                  end >>= loop
              | Sqlite3.Rc.DONE -> return acc
-             | rc ->
-                 ignore (Sqlite3.reset stmt);
-                 raise_error rc
-         in loop init)
+             | rc -> raise_error rc
+         in ensure_reset_stmt stmt loop init)
       db
       expr.statement
 
@@ -353,15 +344,10 @@ struct
                  begin try_lwt
                    check_num_cols "iter" stmt expr >>
                    f (snd expr.get_data (Sqlite3.row_data stmt))
-                 with e ->
-                   ignore (Sqlite3.reset stmt);
-                   fail e
                  end >>= loop
              | Sqlite3.Rc.DONE -> return ()
-             | rc ->
-                 ignore (Sqlite3.reset stmt);
-                 raise_error rc
-         in loop ())
+             | rc -> raise_error rc
+         in ensure_reset_stmt stmt loop ())
       db
       expr.statement
 end
