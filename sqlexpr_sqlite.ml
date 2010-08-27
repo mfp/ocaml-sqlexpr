@@ -336,6 +336,7 @@ struct
           return x
       with e ->
         unsafe_execute db "ROLLBACK TO %s" txid >>
+        unsafe_execute db "RELEASE %s" txid >>
         fail e
 
   let (>>=) = bind
