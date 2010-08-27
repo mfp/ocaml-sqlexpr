@@ -6,7 +6,7 @@ sig
   val bind : 'a t -> ('a -> 'b t) -> 'b t
   val fail : exn -> 'a t
   val catch : (unit -> 'a t) -> (exn -> 'a t) -> 'a t
-  val finalize : (unit -> 'a t) -> (unit -> 'a t) -> 'a t
+  val finalize : (unit -> 'a t) -> (unit -> unit t) -> 'a t
   val sleep : float -> unit t
   val auto_yield : float -> (unit -> unit t)
 end
