@@ -136,12 +136,38 @@ let test_outputs =
       "%b" >:: tn "%b" insert_b sql"SELECT @d{id}, @b?{v} FROM foo" [true; false];
     ]
 
+exception Cancel
+
+let test_transaction () =
+  with_db begin fun db () ->
+    let s_of_pair (id, data) = sprintf "(%d, %S)" id data in
+    let get_rows () = S.select db sql"SELECT @d{id}, @s{data} FROM foo ORDER BY id" in
+    let insert = S.execute db sql"INSERT INTO foo(id, data) VALUES(%d, %s)" in
+    let aeq = aeq_list ~printer:s_of_pair in
+      S.execute db sql"CREATE TABLE foo(id INTEGER NOT NULL, data TEXT NOT NULL)";
+      aeq ~msg:"Init" [] (get_rows ());
+      S.transaction db
+        (fun _ ->
+           aeq [] (get_rows ());
+           insert 1 "foo";
+           aeq ~msg:"One insert in TX" [1, "foo"] (get_rows ());
+           try
+             S.transaction db
+               (fun _ ->
+                  insert 2 "bar";
+                  aeq ~msg:"Insert in nested TX" [1, "foo"; 2, "bar";] (get_rows ());
+                  raise Cancel)
+           with Cancel ->
+             aeq ~msg:"After nested TX is canceled" [1, "foo"] (get_rows ()));
+      aeq [1, "foo"] (get_rows ());
+  end ()
 
 let all_tests =
   [
     "Directives" >::: test_directives;
     "Outputs" >::: test_outputs;
     "Directives in output exprs" >:: test_oexpr_directives;
+    "Transactions" >:: test_transaction;
   ]
 
 let _ =
