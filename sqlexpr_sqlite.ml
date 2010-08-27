@@ -175,13 +175,24 @@ struct
       done;
       sql
 
-  let profile sql f =
+  let string_of_param = function
+      Sqlite3.Data.NONE -> "NONE"
+    | Sqlite3.Data.NULL -> "NULL"
+    | Sqlite3.Data.INT n -> Int64.to_string n
+    | Sqlite3.Data.FLOAT f -> string_of_float f
+    | Sqlite3.Data.TEXT s | Sqlite3.Data.BLOB s -> sprintf "%S" s
+
+  let string_of_params l = String.concat ", " (List.map string_of_param l)
+
+  (* accept a reversed list of params *)
+  let profile sql ?(params = []) f =
     match profile_ch with
         None -> f ()
       | Some ch ->
           let sql = prettify_sql_stmt sql in
           let t0 = Unix.gettimeofday () in
-          Printf.fprintf ch "XXX\t%s\n%!" sql;
+          Printf.fprintf ch "XXX\t%s with params %s\n%!"
+            sql (string_of_params (List.rev params));
           let y = f () in
           let dt = Unix.gettimeofday () -. t0 in
             Printf.fprintf ch "%8.6f\t%s\n%!" dt sql;
@@ -223,8 +234,9 @@ struct
         [] -> return ()
       | hd :: tl -> f i hd >> iteri ~i:(i + 1) f tl
     in
+      (* the list of params is reversed *)
       iteri (fun n v -> check_ok (Sqlite3.bind stmt (nparams - n)) v) params >>
-      profile sql (fun () -> f stmt)
+      profile sql ~params (fun () -> f stmt)
 
   let do_select f db p =
     p.directive (prepare db f)
