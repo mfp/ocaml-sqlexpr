@@ -351,7 +351,7 @@ struct
            match Sqlite3.step stmt with
                Sqlite3.Rc.ROW ->
                  begin try_lwt
-                   check_num_cols "fold" stmt expr >>
+                   check_num_cols "iter" stmt expr >>
                    f (snd expr.get_data (Sqlite3.row_data stmt))
                  with e ->
                    ignore (Sqlite3.reset stmt);
