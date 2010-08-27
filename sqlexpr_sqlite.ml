@@ -211,13 +211,9 @@ struct
 
   let make_expression stmt n f = { statement = stmt; get_data = (n, f) }
 
-  let sleep dt = let _, _, _ = Unix.select [] [] [] dt in ()
-
   let rec check_ok ?stmt f x = match f x with
       Sqlite3.Rc.OK | Sqlite3.Rc.DONE -> return ()
-    | Sqlite3.Rc.BUSY ->
-        sleep 0.002; (* FIXME: use the monad's sleep *)
-        check_ok f x
+    | Sqlite3.Rc.BUSY -> M.sleep 0.010 >> check_ok f x
     | code ->
         Option.may (fun stmt -> ignore (Sqlite3.reset stmt)) stmt;
         raise_error code
