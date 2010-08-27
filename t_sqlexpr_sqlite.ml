@@ -142,8 +142,11 @@ let test_transaction () =
   with_db begin fun db () ->
     let s_of_pair (id, data) = sprintf "(%d, %S)" id data in
     let get_rows () = S.select db sql"SELECT @d{id}, @s{data} FROM foo ORDER BY id" in
+    let get_one () = S.select_one db sql"SELECT @d{id}, @s{data} FROM foo ORDER BY id" in
+    let get_one' () = S.select_one db sqlc"SELECT @d{id}, @s{data} FROM foo ORDER BY id" in
     let insert = S.execute db sql"INSERT INTO foo(id, data) VALUES(%d, %s)" in
     let aeq = aeq_list ~printer:s_of_pair in
+    let aeq_one = assert_equal ~printer:s_of_pair in
       S.execute db sql"CREATE TABLE foo(id INTEGER NOT NULL, data TEXT NOT NULL)";
       aeq ~msg:"Init" [] (get_rows ());
       S.transaction db
@@ -151,6 +154,8 @@ let test_transaction () =
            aeq [] (get_rows ());
            insert 1 "foo";
            aeq ~msg:"One insert in TX" [1, "foo"] (get_rows ());
+           aeq_one ~msg:"select_one after 1 insert in TX" (1, "foo") (get_one ());
+           aeq_one ~msg:"select_one (cached) after 1 insert in TX" (1, "foo") (get_one' ());
            try
              S.transaction db
                (fun _ ->

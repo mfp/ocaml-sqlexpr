@@ -284,7 +284,10 @@ struct
     do_select
       (fun stmt ->
          match Sqlite3.step stmt with
-             Sqlite3.Rc.ROW -> snd expr.get_data (Sqlite3.row_data stmt)
+             Sqlite3.Rc.ROW ->
+               let r = snd expr.get_data (Sqlite3.row_data stmt) in
+                 ignore (Sqlite3.reset stmt);
+                 r
            | Sqlite3.Rc.DONE -> M.fail Not_found
            | rc -> raise_error rc)
       db
