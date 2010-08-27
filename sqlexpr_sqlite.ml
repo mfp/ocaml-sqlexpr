@@ -291,35 +291,6 @@ struct
       db
       expr.statement
 
-  let iter db f expr =
-    do_select
-      (fun stmt ->
-         let rec loop () =
-           match Sqlite3.step stmt with
-               Sqlite3.Rc.ROW ->
-                 check_num_cols "iter" stmt expr >>
-                 f (snd expr.get_data (Sqlite3.row_data stmt)) >>
-                 loop ()
-             | Sqlite3.Rc.DONE -> return ()
-             | rc -> raise_error rc
-         in loop ())
-      db
-      expr.statement
-
-  let fold db f init expr =
-    do_select
-      (fun stmt ->
-         let rec loop acc =
-           match Sqlite3.step stmt with
-               Sqlite3.Rc.ROW ->
-                 check_num_cols "fold" stmt expr >>
-                 loop (f init (snd expr.get_data (Sqlite3.row_data stmt)))
-             | Sqlite3.Rc.DONE -> acc
-             | rc -> raise_error rc
-         in loop init)
-      db
-      expr.statement
-
   let new_tx_id =
     let pid = Unix.getpid () in
     let n = ref 0 in
