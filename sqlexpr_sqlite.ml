@@ -271,7 +271,9 @@ struct
   let select_f db f expr =
     do_select
       (fun stmt ->
+         let auto_yield = M.auto_yield 0.01 in
          let rec loop l =
+           auto_yield () >>
            match Sqlite3.step stmt with
                Sqlite3.Rc.ROW ->
                  check_num_cols "select" stmt expr >>
@@ -322,7 +324,9 @@ struct
   let fold db f init expr =
     do_select
       (fun stmt ->
+         let auto_yield = M.auto_yield 0.01 in
          let rec loop acc =
+           auto_yield () >>
            match Sqlite3.step stmt with
                Sqlite3.Rc.ROW ->
                  begin try_lwt
@@ -338,7 +342,9 @@ struct
   let iter db f expr =
     do_select
       (fun stmt ->
+         let auto_yield = M.auto_yield 0.01 in
          let rec loop () =
+           auto_yield () >>
            match Sqlite3.step stmt with
                Sqlite3.Rc.ROW ->
                  begin try_lwt
