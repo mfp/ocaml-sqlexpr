@@ -10,6 +10,14 @@ val sqlite_db : db -> Sqlite3.db
 
 module Make(M : Sqlexpr_concurrency.THREAD) :
 sig
+  type db
+  val open_db : string -> db
+  val close_db : db -> unit
+  val sqlite_db : db -> Sqlite3.db
+
+  exception Error of exn
+  exception Sqlite_error of string * Sqlite3.Rc.t
+
   module Directives :
   sig
     type st

@@ -160,6 +160,16 @@ struct
     get_data : int * (Sqlite3.Data.t array -> 'b);
   }
 
+  type olddb = db
+  type db = olddb
+
+  exception Error = Error
+  exception Sqlite_error = Sqlite_error
+
+  let open_db = open_db
+  let close_db = close_db
+  let sqlite_db = sqlite_db
+
   let profile_ch =
     try
       Some (open_out_gen [Open_append; Open_creat; Open_binary] 0o644
