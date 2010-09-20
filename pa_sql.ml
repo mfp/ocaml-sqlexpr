@@ -14,6 +14,9 @@ type sql_element =
     [ no_output_element
     | `Output of no_output_element list * output_type * bool (* nullable *) ]
 
+let collected_statements = ref []
+let collected_init_statements = ref []
+
 (* [parse_without_output_exprs continuation acc llist]
  * parse %x(?) and %%, but don't recognize @x{} expressions, passing a list
  * of no_output_elements to the continuation (used for open recursion). *)
@@ -184,19 +187,80 @@ let create_sql_expression _loc ~cacheable (sql_elms : sql_element list) =
         $int:string_of_int (List.length conv_exprs)$
         $tuple_func$ >>
 
-let expand_sql_literal ~cacheable ctx _loc str =
+let expand_sql_literal ?(is_init = false) ~cacheable ctx _loc str =
   let sql_elms = parse (unescape _loc str) in
+  let sql_stmt_text =
+    let no_output = concat_map expand_output_elms sql_elms in
+      sql_statement no_output in
+  let push l = l := !l @ [sql_stmt_text] in
+    push (if is_init then collected_init_statements else collected_statements);
     if List.exists (function `Output _ -> true | _ -> false) sql_elms then
       create_sql_expression _loc ~cacheable sql_elms
     else
       create_sql_statement _loc ~cacheable sql_elms
 
+let string_list_expr ?(_loc = Loc.ghost) = function
+    [] -> <:expr< [] >>
+  | hd :: tl ->
+        let tl = List.map (fun s -> <:expr< $str:s$ >>) tl in
+          List.fold_right
+            (fun e l -> <:expr< [ $e$ :: $l$ ] >>)
+            tl
+            <:expr< [ $str:hd$ ] >>
+
+let expand_sqlite_check_functions ctx _loc =
+  let statement_check =
+    <:expr<
+      try
+        ignore (Sqlite3.prepare db stmt)
+      with [Sqlite3.Error s ->
+              do {
+                ret.val := False;
+                Printf.bprintf outbuf "Error in statement %S: %s\n" stmt s
+              }
+      ]
+    >> in
+  let stmt_list = string_list_expr ~_loc !collected_statements in
+  let check_in_db_expr =
+    <:expr< fun db outbuf ->
+      let ret = ref True in
+        do {
+          List.iter (fun stmt -> $statement_check$) $stmt_list$;
+          ret.val;
+        }
+    >> in
+  let init_stmts = string_list_expr ~_loc !collected_init_statements in
+  let init_db_expr =
+    (* FIXME: check ret value from Sqlite3.exec *)
+    <:expr< fun db -> List.iter (fun s -> ignore(Sqlite3.exec db s)) $init_stmts$ >> in
+  let in_mem_check_expr =
+    <:expr<
+      let db = Sqlite3.db_open ":memory:" in
+        do {
+          init_db db;
+          check_db db;
+        }
+    >>
+  in <:expr<
+      let init_db = $init_db_expr$ in
+      let check_db = $check_in_db_expr$ in
+      let in_mem_check = $in_mem_check_expr$ in
+        (init_db, check_db, in_mem_check)
+  >>
+
 let _ =
   register_expr_specifier "sql"
     (fun ctx _loc str -> expand_sql_literal ~cacheable:false ctx _loc str);
+  register_expr_specifier "sqlinit"
+    (fun ctx _loc str ->
+       expand_sql_literal ~is_init:true ~cacheable:false ctx _loc str);
   register_expr_specifier "sqlc"
     (fun ctx _loc str ->
        let expr = expand_sql_literal ~cacheable:true ctx _loc str in
        let id = register_shared_expr ctx expr in
-         <:expr< $id:id$ >>)
+         <:expr< $id:id$ >>);
+  register_expr_specifier "sql_check"
+    (fun ctx _loc -> function
+         "sqlite" -> expand_sqlite_check_functions ctx _loc
+       | _ -> <:expr< () >>)
 
