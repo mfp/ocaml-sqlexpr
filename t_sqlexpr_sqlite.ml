@@ -15,11 +15,7 @@ let aeq_list ~printer =
   assert_equal
     ~printer:(fun l -> "[ " ^ String.concat "; " (List.map printer l) ^ " ]")
 
-module S =
-struct
-  include Sqlexpr
-  include Sqlexpr_sqlite
-end
+module S = Sqlexpr
 
 let with_db f x =
   let db = S.open_db ":memory:" in
