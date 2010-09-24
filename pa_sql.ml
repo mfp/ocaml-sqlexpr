@@ -232,7 +232,15 @@ let expand_sqlite_check_functions ctx _loc =
   let init_stmts = string_list_expr ~_loc !collected_init_statements in
   let init_db_expr =
     (* FIXME: check ret value from Sqlite3.exec *)
-    <:expr< fun db -> List.iter (fun s -> ignore(Sqlite3.exec db s)) $init_stmts$ >> in
+    <:expr< fun db ->
+      List.iter
+        (fun s -> match Sqlite3.exec db s with
+             [
+               Sqlite3.Rc.OK -> ()
+             | rc -> Pervasives.failwith
+                       (Printf.sprintf "Error in init. SQL statement (%s) %S"
+                          (Sqlite3.Rc.to_string rc) s)])
+        $init_stmts$ >> in
   let in_mem_check_expr =
     <:expr<
       let db = Sqlite3.db_open ":memory:" in
