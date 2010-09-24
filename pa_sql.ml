@@ -201,12 +201,11 @@ let expand_sql_literal ?(is_init = false) ~cacheable ctx _loc str =
 
 let string_list_expr ?(_loc = Loc.ghost) = function
     [] -> <:expr< [] >>
-  | hd :: tl ->
-        let tl = List.map (fun s -> <:expr< $str:s$ >>) tl in
-          List.fold_right
-            (fun e l -> <:expr< [ $e$ :: $l$ ] >>)
-            tl
-            <:expr< [ $str:hd$ ] >>
+  | l ->
+      List.fold_left
+        (fun l e -> <:expr< [ $e$ :: $l$ ] >>)
+        <:expr< [] >>
+        (List.rev_map (fun s -> <:expr< $str:s$ >>) l)
 
 let expand_sqlite_check_functions ctx _loc =
   let statement_check =
