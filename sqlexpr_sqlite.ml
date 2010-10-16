@@ -142,6 +142,96 @@ struct
   let maybe_bool = maybe bool
 end
 
+type 'a ret = Ret of 'a | Exn of exn
+
+let profile_ch =
+  try
+    Some (open_out_gen [Open_append; Open_creat; Open_binary] 0o644
+            (Unix.getenv "OCAML_SQLEXPR_PROFILE"))
+  with Not_found -> None
+
+let profile_uuid =
+  let uuid =
+    sprintf "%s %d %d %g %s %g"
+      (Unix.gethostname ())
+      (Unix.getpid ())
+      (Unix.getppid ())
+      (Unix.gettimeofday ())
+      Sys.executable_name
+      ((Unix.times ()).Unix.tms_utime)
+  in Digest.to_hex (Digest.string uuid)
+
+let profile_op ?(uuid = profile_uuid) op detail f =
+  match profile_ch with
+      None -> f ()
+    | Some ch ->
+        let t0 = Unix.gettimeofday () in
+        let ret = try Ret (f ()) with e -> Exn e in
+        let dt = Unix.gettimeofday () -. t0 in
+        let elapsed_time_us = int_of_float (1e6 *. dt) in
+          (* the format used by PGOcaml *)
+        let ret_txt = match ret with
+            Ret _ -> "ok"
+          | Exn e -> Printexc.to_string e in
+        let row =
+          [ "1"; uuid; op; string_of_int elapsed_time_us; ret_txt] @
+          detail
+        in Csv.save_out ch [row];
+           flush ch;
+           match ret with
+               Ret r -> r
+             | Exn e -> raise e
+
+let prettify_sql_stmt sql =
+  let sql = String.copy sql in
+    for i = 0 to String.length sql - 1 do
+      match sql.[i] with
+          '\r' | '\n' | '\t' -> sql.[i] <- ' '
+            | _ -> ()
+    done;
+    sql
+
+let string_of_param = function
+    Sqlite3.Data.NONE -> "NONE"
+  | Sqlite3.Data.NULL -> "NULL"
+  | Sqlite3.Data.INT n -> Int64.to_string n
+  | Sqlite3.Data.FLOAT f -> string_of_float f
+  | Sqlite3.Data.TEXT s | Sqlite3.Data.BLOB s -> sprintf "%S" s
+
+let string_of_params l = String.concat ", " (List.map string_of_param l)
+
+(* accept a reversed list of params *)
+let profile_execute_sql sql ?(params = []) f =
+  match profile_ch with
+      None -> f ()
+    | Some ch ->
+        let details =
+          [ "name"; Digest.to_hex (Digest.string sql); "portal"; " " ]
+        in profile_op "execute" details f
+
+let profile_prepare_stmt sql f =
+  match profile_ch with
+      None -> f ()
+    | Some ch ->
+        let details =
+          [ "query"; sql; "name"; Digest.to_hex (Digest.string sql) ]
+        in profile_op "prepare" details f
+
+(* pgocaml_prof wants to see a connect entry *)
+let () =
+  Option.may
+    (fun ch ->
+       let detail =
+         [
+           "user"; "";
+           "database"; "";
+           "host"; "";
+           "port"; "0";
+           "prog"; Sys.executable_name
+         ]
+       in profile_op "connect" detail (fun () -> ()))
+    profile_ch
+
 module Make(M : THREAD) =
 struct
   module Lwt = M
@@ -170,47 +260,6 @@ struct
   let close_db = close_db
   let sqlite_db = sqlite_db
 
-  let profile_ch =
-    try
-      Some (open_out_gen [Open_append; Open_creat; Open_binary] 0o644
-              (Unix.getenv "OCAML_SQLEXPR_PROFILE"))
-    with Not_found -> None
-
-  let prettify_sql_stmt sql =
-    let sql = String.copy sql in
-      for i = 0 to String.length sql - 1 do
-        match sql.[i] with
-            '\r' | '\n' | '\t' -> sql.[i] <- ' '
-              | _ -> ()
-      done;
-      sql
-
-  let string_of_param = function
-      Sqlite3.Data.NONE -> "NONE"
-    | Sqlite3.Data.NULL -> "NULL"
-    | Sqlite3.Data.INT n -> Int64.to_string n
-    | Sqlite3.Data.FLOAT f -> string_of_float f
-    | Sqlite3.Data.TEXT s | Sqlite3.Data.BLOB s -> sprintf "%S" s
-
-  let string_of_params l = String.concat ", " (List.map string_of_param l)
-
-  (* accept a reversed list of params *)
-  let profile sql ?(params = []) f =
-    match profile_ch with
-        None -> f ()
-      | Some ch ->
-          let sql = prettify_sql_stmt sql in
-          let t0 = Unix.gettimeofday () in
-          begin match params with
-              [] -> Printf.fprintf ch "XXX\t%s\n%!" sql
-            | l -> Printf.fprintf ch "XXX\t%s with params %s\n%!"
-                     sql (string_of_params (List.rev l))
-          end;
-          let y = f () in
-          let dt = Unix.gettimeofday () -. t0 in
-            Printf.fprintf ch "%8.6f\t%s\n%!" dt sql;
-            y
-
   let make_statement ~cacheable sql directive =
     {
       sql_statement = sql;
@@ -232,13 +281,17 @@ struct
     lwt stmt =
       try_lwt
         match prep with
-            None -> return (Sqlite3.prepare db sql)
+            None ->
+              profile_prepare_stmt sql
+                (fun () -> return (Sqlite3.prepare db sql))
           | Some r -> match !r with
                 Some stmt -> check_ok ~stmt Sqlite3.reset stmt >> return stmt
               | None ->
-                  let stmt = Sqlite3.prepare db sql in
-                    r := Some stmt;
-                    return stmt
+                  profile_prepare_stmt sql
+                    (fun () ->
+                       let stmt = Sqlite3.prepare db sql in
+                         r := Some stmt;
+                         return stmt)
       with e ->
         failwithfmt "Error with SQL statement %S:\n%s" sql (Printexc.to_string e) in
     let rec iteri ?(i = 0) f = function
@@ -247,7 +300,7 @@ struct
     in
       (* the list of params is reversed *)
       iteri (fun n v -> check_ok ~stmt (Sqlite3.bind stmt (nparams - n)) v) params >>
-      profile sql ~params (fun () -> f stmt)
+      profile_execute_sql sql ~params (fun () -> f stmt)
 
   let do_select f db p =
     p.directive (prepare db f)
@@ -315,17 +368,24 @@ struct
       fun () -> incr n; sprintf "__sqlexpr_sqlite_tx_%d_%d" pid !n
 
   let unsafe_execute db fmt =
-    ksprintf (fun sql -> profile sql (fun () -> check_ok (Sqlite3.exec db) sql)) fmt
+    ksprintf (fun sql -> check_ok (Sqlite3.exec db) sql) fmt
+
+  let unsafe_execute_prof text db fmt =
+    ksprintf
+      (fun sql ->
+         profile_prepare_stmt text (fun () -> ());
+         profile_execute_sql text (fun () -> check_ok (Sqlite3.exec db) sql))
+      fmt
 
   let transaction db f =
     let txid = new_tx_id () in
       unsafe_execute db "SAVEPOINT %s" txid >>
       try_lwt
         lwt x = f db in
-          unsafe_execute db "RELEASE %s" txid >>
+          unsafe_execute_prof "RELEASE" db "RELEASE %s" txid >>
           return x
       with e ->
-        unsafe_execute db "ROLLBACK TO %s" txid >>
+        unsafe_execute_prof "ROLLBACK" db "ROLLBACK TO %s" txid >>
         unsafe_execute db "RELEASE %s" txid >>
         fail e
 
