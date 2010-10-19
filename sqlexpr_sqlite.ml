@@ -401,7 +401,7 @@ struct
                Sqlite3.Rc.ROW ->
                  begin try_lwt
                    check_num_cols "fold" stmt expr >>
-                   f init (snd expr.get_data (Sqlite3.row_data stmt))
+                   f acc (snd expr.get_data (Sqlite3.row_data stmt))
                  end >>= loop
              | Sqlite3.Rc.DONE -> return acc
              | rc -> raise_error rc

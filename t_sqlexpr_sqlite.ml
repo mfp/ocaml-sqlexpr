@@ -163,12 +163,35 @@ let test_transaction () =
       aeq [1, "foo"] (get_rows ());
   end ()
 
+let test_fold_and_iter () =
+  with_db begin fun db () ->
+    S.execute db sql"CREATE TABLE foo(n INTEGER NOT NULL)";
+    let l = Array.to_list (Array.init 100 (fun n -> 1 + Random.int 100000)) in
+      List.iter (S.execute db sqlc"INSERT INTO foo(n) VALUES(%d)") l;
+      let sum = List.fold_left (+) 0 l in
+      let count, sum' =
+        S.fold db
+          (fun (count, sum) n -> (count + 1, sum + n))
+          (0, 0) sqlc"SELECT @d{n} FROM foo"
+      in
+        aeq_int ~msg:"fold: number of elements" (List.length l) count;
+        aeq_int ~msg:"fold: sum of elements" sum sum';
+        let count = ref 0 in
+        let sum' = ref 0 in
+          S.iter db
+            (fun n -> incr count; sum' := !sum' + n)
+            sqlc"SELECT @d{n} FROM foo";
+          aeq_int ~msg:"iter: number of elements" (List.length l) !count;
+          aeq_int ~msg:"iter: sum of elements" sum !sum';
+  end ()
+
 let all_tests =
   [
     "Directives" >::: test_directives;
     "Outputs" >::: test_outputs;
     "Directives in output exprs" >:: test_oexpr_directives;
     "Transactions" >:: test_transaction;
+    "Fold and iter" >:: test_fold_and_iter;
   ]
 
 let _ =
