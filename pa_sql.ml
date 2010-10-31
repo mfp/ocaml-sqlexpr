@@ -215,13 +215,13 @@ let expand_sqlite_check_functions ctx _loc =
       with [Sqlite3.Error s ->
               do {
                 ret.val := False;
-                Printf.bprintf outbuf "Error in statement %S: %s\n" stmt s
+                Format.fprintf fmt "Error in statement %S: %s\n" stmt s
               }
       ]
     >> in
   let stmt_list = string_list_expr ~_loc !collected_statements in
   let check_in_db_expr =
-    <:expr< fun db outbuf ->
+    <:expr< fun db fmt ->
       let ret = ref True in
         do {
           List.iter (fun stmt -> $statement_check$) $stmt_list$;
@@ -230,8 +230,7 @@ let expand_sqlite_check_functions ctx _loc =
     >> in
   let init_stmts = string_list_expr ~_loc !collected_init_statements in
   let init_db_expr =
-    (* FIXME: check ret value from Sqlite3.exec *)
-    <:expr< fun db outbuf ->
+    <:expr< fun db fmt ->
       let ret = ref True in
         do {
           List.iter
@@ -241,7 +240,7 @@ let expand_sqlite_check_functions ctx _loc =
                    Sqlite3.Rc.OK -> ()
                  | rc -> do {
                      ret.val := False;
-                     Printf.bprintf outbuf "Error in init. SQL statement (%s) %S\n"
+                     Format.fprintf fmt "Error in init. SQL statement (%s)@ %S@\n"
                        (Sqlite3.errmsg db) stmt
                    }
                  ])
@@ -250,9 +249,9 @@ let expand_sqlite_check_functions ctx _loc =
         } >> in
   let in_mem_check_expr =
     <:expr<
-      fun outbuf ->
+      fun fmt ->
       let db = Sqlite3.db_open ":memory:" in
-        init_db db outbuf && check_db db outbuf
+        init_db db fmt && check_db db fmt
     >>
   in <:expr<
       let init_db = $init_db_expr$ in
