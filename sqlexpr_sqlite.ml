@@ -11,7 +11,19 @@ module WT = Weak.Make(struct
                         let equal = (==)
                       end)
 
-type db = { db : Sqlite3.db; stmts : WT.t }
+module IH = Hashtbl.Make(struct
+                           type t = int
+                           let hash n = n
+                           let equal = (==)
+                         end)
+
+type db =
+    {
+      db : Sqlite3.db;
+      id : int;
+      stmts : WT.t;
+      mutable stmt_caches : Sqlite3.stmt IH.t list;
+    }
 
 let () =
   Printexc.register_printer
@@ -24,16 +36,24 @@ let () =
                    s (Sqlite3.Rc.to_string rc))
        | _ -> None)
 
+let new_id =
+  let n = ref 0 in
+    fun () -> incr n; !n
+
 let open_db fname =
-  { db = Sqlite3.db_open fname; stmts = WT.create 13 }
+  {
+    db = Sqlite3.db_open fname; id = new_id (); stmts = WT.create 13;
+    stmt_caches = [];
+  }
 
 let close_db db =
   try
     WT.iter
       (fun stmt -> ignore (Sqlite3.finalize stmt))
       db.stmts;
+    List.iter (fun cache -> IH.remove cache db.id) db.stmt_caches;
     ignore (Sqlite3.db_close db.db)
-  with Sqlite3.Error _ -> ()
+  with Sqlite3.Error _ -> () (* FIXME: raise? *)
 
 let sqlite_db db = db.db
 
@@ -83,13 +103,13 @@ module Directives =
 struct
   module D = Sqlite3.Data
 
-  type st = (Sqlite3.Data.t list * int * string * Sqlite3.stmt option ref option)
+  type st = (Sqlite3.Data.t list * int * string * Sqlite3.stmt IH.t option)
 
   and ('a, 'b) statement =
       {
         sql_statement : string;
         cacheable : bool;
-        prepared_statement : Sqlite3.stmt option ref;
+        stmt_cache : Sqlite3.stmt IH.t option;
         directive : ('a, 'b) directive
       }
 
@@ -286,7 +306,7 @@ struct
     {
       sql_statement = sql;
       cacheable = cacheable;
-      prepared_statement = ref None;
+      stmt_cache = if cacheable then Some (IH.create 13) else None;
       directive = directive;
     }
 
@@ -301,23 +321,26 @@ struct
           Option.may (fun stmt -> ignore (Sqlite3.reset stmt)) stmt;
           raise_error db ?sql ?params ~errmsg code
 
-  let prepare db f (params, nparams, sql, prep) =
+  let maybe_not_found f x = try Some (f x) with Not_found -> None
+
+  let prepare db f (params, nparams, sql, cache) =
     lwt stmt =
       try_lwt
-        match prep with
+        match cache with
             None ->
               profile_prepare_stmt sql
                 (fun () ->
                    let stmt = Sqlite3.prepare db.db sql in
                      WT.add db.stmts stmt;
                      return stmt)
-          | Some r -> match !r with
+          | Some cache -> match maybe_not_found (IH.find cache) db.id with
                 Some stmt -> check_ok ~stmt db Sqlite3.reset stmt >> return stmt
               | None ->
                   profile_prepare_stmt sql
                     (fun () ->
                        let stmt = Sqlite3.prepare db.db sql in
-                         r := Some stmt;
+                         IH.add cache db.id stmt;
+                         db.stmt_caches <- cache :: db.stmt_caches;
                          WT.add db.stmts stmt;
                          return stmt)
       with e ->
@@ -333,9 +356,7 @@ struct
       profile_execute_sql sql ~params (fun () -> f stmt sql params)
 
   let do_select f db p =
-    p.directive (prepare db f)
-      ([], 0, p.sql_statement,
-       if p.cacheable then Some p.prepared_statement else None)
+    p.directive (prepare db f) ([], 0, p.sql_statement, p.stmt_cache)
 
   let execute db (p : ('a, unit M.t) statement) =
     do_select (fun stmt sql params ->
