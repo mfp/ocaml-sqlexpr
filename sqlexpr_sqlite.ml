@@ -274,7 +274,7 @@ struct
   let rec check_ok ?stmt db f x = match f x with
       Sqlite3.Rc.OK | Sqlite3.Rc.DONE -> return ()
     | Sqlite3.Rc.BUSY | Sqlite3.Rc.LOCKED ->
-        M.sleep 0.010 >> check_ok db f x
+        M.sleep 0.010 >> check_ok ?stmt db f x
     | code ->
         Option.may (fun stmt -> ignore (Sqlite3.reset stmt)) stmt;
         raise_error db code
