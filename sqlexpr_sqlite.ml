@@ -30,13 +30,17 @@ let sqlite_db db = db
 module type THREAD = Sqlexpr_concurrency.THREAD
 
 let prettify_sql_stmt sql =
-  let sql = String.copy sql in
+  let b = Buffer.create 80 in
+  let last_was_space = ref false in
     for i = 0 to String.length sql - 1 do
       match sql.[i] with
-          '\r' | '\n' | '\t' -> sql.[i] <- ' '
-            | _ -> ()
+          '\r' | '\n' | '\t' | ' ' ->
+             if not !last_was_space then Buffer.add_char b ' ';
+             last_was_space := true
+        | c -> Buffer.add_char b c;
+               last_was_space := false
     done;
-    sql
+    (Buffer.contents b)
 
 let string_of_param = function
     Sqlite3.Data.NONE -> "NONE"
@@ -53,7 +57,7 @@ struct
     let msg = Sqlite3.Rc.to_string errcode ^ " " ^ errmsg in
     let msg = match sql with
         None -> msg
-      | Some sql -> sprintf "%s in %s" msg sql in
+      | Some sql -> sprintf "%s in %s" msg (prettify_sql_stmt sql) in
     let msg = match params with
         None | Some [] -> msg
       | Some params ->
