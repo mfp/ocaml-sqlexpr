@@ -5,7 +5,13 @@ open ExtList
 exception Error of exn
 exception Sqlite_error of string * Sqlite3.Rc.t
 
-type db = Sqlite3.db
+module WT = Weak.Make(struct
+                        type t = Sqlite3.stmt
+                        let hash = Hashtbl.hash
+                        let equal = (==)
+                      end)
+
+type db = { db : Sqlite3.db; stmts : WT.t }
 
 let () =
   Printexc.register_printer
@@ -18,14 +24,18 @@ let () =
                    s (Sqlite3.Rc.to_string rc))
        | _ -> None)
 
-let open_db fname = Sqlite3.db_open fname
+let open_db fname =
+  { db = Sqlite3.db_open fname; stmts = WT.create 13 }
 
 let close_db db =
   try
-    ignore (Sqlite3.db_close db)
+    WT.iter
+      (fun stmt -> ignore (Sqlite3.finalize stmt))
+      db.stmts;
+    ignore (Sqlite3.db_close db.db)
   with Sqlite3.Error _ -> ()
 
-let sqlite_db db = db
+let sqlite_db db = db.db
 
 module type THREAD = Sqlexpr_concurrency.THREAD
 
@@ -53,7 +63,7 @@ let string_of_params l = String.concat ", " (List.map string_of_param l)
 
 module Error(M : THREAD) =
 struct
-  let raise_error db ?sql ?params ?(errmsg = Sqlite3.errmsg db) errcode =
+  let raise_error db ?sql ?params ?(errmsg = Sqlite3.errmsg db.db) errcode =
     let msg = Sqlite3.Rc.to_string errcode ^ " " ^ errmsg in
     let msg = match sql with
         None -> msg
@@ -287,7 +297,7 @@ struct
     | Sqlite3.Rc.BUSY | Sqlite3.Rc.LOCKED ->
         M.sleep 0.010 >> check_ok ?sql ?stmt db f x
     | code ->
-        let errmsg = Sqlite3.errmsg db in
+        let errmsg = Sqlite3.errmsg db.db in
           Option.may (fun stmt -> ignore (Sqlite3.reset stmt)) stmt;
           raise_error db ?sql ?params ~errmsg code
 
@@ -297,14 +307,18 @@ struct
         match prep with
             None ->
               profile_prepare_stmt sql
-                (fun () -> return (Sqlite3.prepare db sql))
+                (fun () ->
+                   let stmt = Sqlite3.prepare db.db sql in
+                     WT.add db.stmts stmt;
+                     return stmt)
           | Some r -> match !r with
                 Some stmt -> check_ok ~stmt db Sqlite3.reset stmt >> return stmt
               | None ->
                   profile_prepare_stmt sql
                     (fun () ->
-                       let stmt = Sqlite3.prepare db sql in
+                       let stmt = Sqlite3.prepare db.db sql in
                          r := Some stmt;
+                         WT.add db.stmts stmt;
                          return stmt)
       with e ->
         failwithfmt "Error with SQL statement %S:\n%s" sql (Printexc.to_string e) in
@@ -331,7 +345,7 @@ struct
     do_select
       (fun stmt sql params ->
          check_ok ~sql ~params ~stmt db Sqlite3.step stmt >>
-         return (Sqlite3.last_insert_rowid db))
+         return (Sqlite3.last_insert_rowid db.db))
       db p
 
   let check_num_cols s stmt expr =
@@ -387,14 +401,14 @@ struct
       fun () -> incr n; sprintf "__sqlexpr_sqlite_tx_%d_%d" pid !n
 
   let unsafe_execute db fmt =
-    ksprintf (fun sql -> check_ok ~sql db (Sqlite3.exec db) sql) fmt
+    ksprintf (fun sql -> check_ok ~sql db (Sqlite3.exec db.db) sql) fmt
 
   let unsafe_execute_prof text db fmt =
     ksprintf
       (fun sql ->
          profile_prepare_stmt text (fun () -> ());
          profile_execute_sql text (fun () ->
-         check_ok ~sql db (Sqlite3.exec db) sql))
+         check_ok ~sql db (Sqlite3.exec db.db) sql))
       fmt
 
   let transaction db f =
