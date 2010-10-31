@@ -29,13 +29,35 @@ let sqlite_db db = db
 
 module type THREAD = Sqlexpr_concurrency.THREAD
 
+let prettify_sql_stmt sql =
+  let sql = String.copy sql in
+    for i = 0 to String.length sql - 1 do
+      match sql.[i] with
+          '\r' | '\n' | '\t' -> sql.[i] <- ' '
+            | _ -> ()
+    done;
+    sql
+
+let string_of_param = function
+    Sqlite3.Data.NONE -> "NONE"
+  | Sqlite3.Data.NULL -> "NULL"
+  | Sqlite3.Data.INT n -> Int64.to_string n
+  | Sqlite3.Data.FLOAT f -> string_of_float f
+  | Sqlite3.Data.TEXT s | Sqlite3.Data.BLOB s -> sprintf "%S" s
+
+let string_of_params l = String.concat ", " (List.map string_of_param l)
+
 module Error(M : THREAD) =
 struct
-  let raise_error db ?sql ?(errmsg = Sqlite3.errmsg db) errcode =
+  let raise_error db ?sql ?params ?(errmsg = Sqlite3.errmsg db) errcode =
     let msg = Sqlite3.Rc.to_string errcode ^ " " ^ errmsg in
     let msg = match sql with
         None -> msg
-      | Some sql -> sprintf "%s in %s" msg sql
+      | Some sql -> sprintf "%s in %s" msg sql in
+    let msg = match params with
+        None | Some [] -> msg
+      | Some params ->
+          sprintf "%s with params %s" msg (string_of_params (List.rev params))
     in M.fail (Error (Sqlite_error (msg, errcode)))
 
   let raise_exn exn = M.fail (Error exn)
@@ -186,24 +208,6 @@ let profile_op ?(uuid = profile_uuid) op detail f =
                Ret r -> r
              | Exn e -> raise e
 
-let prettify_sql_stmt sql =
-  let sql = String.copy sql in
-    for i = 0 to String.length sql - 1 do
-      match sql.[i] with
-          '\r' | '\n' | '\t' -> sql.[i] <- ' '
-            | _ -> ()
-    done;
-    sql
-
-let string_of_param = function
-    Sqlite3.Data.NONE -> "NONE"
-  | Sqlite3.Data.NULL -> "NULL"
-  | Sqlite3.Data.INT n -> Int64.to_string n
-  | Sqlite3.Data.FLOAT f -> string_of_float f
-  | Sqlite3.Data.TEXT s | Sqlite3.Data.BLOB s -> sprintf "%S" s
-
-let string_of_params l = String.concat ", " (List.map string_of_param l)
-
 (* accept a reversed list of params *)
 let profile_execute_sql sql ?(params = []) f =
   match profile_ch with
@@ -274,14 +278,14 @@ struct
 
   let make_expression stmt n f = { statement = stmt; get_data = (n, f) }
 
-  let rec check_ok ?stmt ?sql db f x = match f x with
+  let rec check_ok ?stmt ?sql ?params db f x = match f x with
       Sqlite3.Rc.OK | Sqlite3.Rc.DONE -> return ()
     | Sqlite3.Rc.BUSY | Sqlite3.Rc.LOCKED ->
         M.sleep 0.010 >> check_ok ?sql ?stmt db f x
     | code ->
         let errmsg = Sqlite3.errmsg db in
           Option.may (fun stmt -> ignore (Sqlite3.reset stmt)) stmt;
-          raise_error db ?sql ~errmsg code
+          raise_error db ?sql ?params ~errmsg code
 
   let prepare db f (params, nparams, sql, prep) =
     lwt stmt =
@@ -308,7 +312,7 @@ struct
       iteri
         (fun n v -> check_ok ~sql ~stmt db (Sqlite3.bind stmt (nparams - n)) v)
         params >>
-      profile_execute_sql sql ~params (fun () -> f stmt sql)
+      profile_execute_sql sql ~params (fun () -> f stmt sql params)
 
   let do_select f db p =
     p.directive (prepare db f)
@@ -316,12 +320,14 @@ struct
        if p.cacheable then Some p.prepared_statement else None)
 
   let execute db (p : ('a, unit M.t) statement) =
-    do_select (fun stmt sql -> check_ok ~sql ~stmt db Sqlite3.step stmt) db p
+    do_select (fun stmt sql params ->
+                 check_ok ~sql ~params ~stmt db Sqlite3.step stmt) db p
 
   let insert db p =
     do_select
-      (fun stmt sql -> check_ok ~sql ~stmt db Sqlite3.step stmt >>
-                       return (Sqlite3.last_insert_rowid db))
+      (fun stmt sql params ->
+         check_ok ~sql ~params ~stmt db Sqlite3.step stmt >>
+         return (Sqlite3.last_insert_rowid db))
       db p
 
   let check_num_cols s stmt expr =
@@ -342,7 +348,7 @@ struct
 
   let select_f db f expr =
     do_select
-      (fun stmt sql ->
+      (fun stmt sql params ->
          let auto_yield = M.auto_yield 0.01 in
          let rec loop l =
            auto_yield () >>
@@ -352,7 +358,7 @@ struct
                  lwt x = f (snd expr.get_data (Sqlite3.row_data stmt)) in
                    loop (x :: l)
              | Sqlite3.Rc.DONE -> return (List.rev l)
-             | rc -> raise_error ~sql db rc
+             | rc -> raise_error ~sql ~params db rc
          in ensure_reset_stmt stmt loop [])
       db
       expr.statement
@@ -361,12 +367,12 @@ struct
 
   let select_one db expr =
     do_select
-      (fun stmt sql ->
+      (fun stmt sql params ->
          ensure_reset_stmt stmt begin fun () ->
            match Sqlite3.step stmt with
                Sqlite3.Rc.ROW -> snd expr.get_data (Sqlite3.row_data stmt)
              | Sqlite3.Rc.DONE -> M.fail Not_found
-             | rc -> raise_error ~sql db rc
+             | rc -> raise_error ~sql ~params db rc
          end ())
       db
       expr.statement
@@ -403,7 +409,7 @@ struct
 
   let fold db f init expr =
     do_select
-      (fun stmt sql ->
+      (fun stmt sql params ->
          let auto_yield = M.auto_yield 0.01 in
          let rec loop acc =
            auto_yield () >>
@@ -414,14 +420,14 @@ struct
                    f acc (snd expr.get_data (Sqlite3.row_data stmt))
                  end >>= loop
              | Sqlite3.Rc.DONE -> return acc
-             | rc -> raise_error ~sql db rc
+             | rc -> raise_error ~sql ~params db rc
          in ensure_reset_stmt stmt loop init)
       db
       expr.statement
 
   let iter db f expr =
     do_select
-      (fun stmt sql ->
+      (fun stmt sql params ->
          let auto_yield = M.auto_yield 0.01 in
          let rec loop () =
            auto_yield () >>
@@ -432,7 +438,7 @@ struct
                    f (snd expr.get_data (Sqlite3.row_data stmt))
                  end >>= loop
              | Sqlite3.Rc.DONE -> return ()
-             | rc -> raise_error db ~sql rc
+             | rc -> raise_error db ~sql ~params rc
          in ensure_reset_stmt stmt loop ())
       db
       expr.statement
