@@ -31,8 +31,9 @@ module type THREAD = Sqlexpr_concurrency.THREAD
 
 module Error(M : THREAD) =
 struct
-  let raise_error errcode =
-    M.fail (Error (Sqlite_error (Sqlite3.Rc.to_string errcode, errcode)))
+  let raise_error db errcode =
+    let msg = Sqlite3.Rc.to_string errcode ^ " " ^ Sqlite3.errmsg db in
+      M.fail (Error (Sqlite_error (msg, errcode)))
 
   let raise_exn exn = M.fail (Error exn)
 
@@ -270,12 +271,13 @@ struct
 
   let make_expression stmt n f = { statement = stmt; get_data = (n, f) }
 
-  let rec check_ok ?stmt f x = match f x with
+  let rec check_ok ?stmt db f x = match f x with
       Sqlite3.Rc.OK | Sqlite3.Rc.DONE -> return ()
-    | Sqlite3.Rc.BUSY | Sqlite3.Rc.LOCKED -> M.sleep 0.010 >> check_ok f x
+    | Sqlite3.Rc.BUSY | Sqlite3.Rc.LOCKED ->
+        M.sleep 0.010 >> check_ok db f x
     | code ->
         Option.may (fun stmt -> ignore (Sqlite3.reset stmt)) stmt;
-        raise_error code
+        raise_error db code
 
   let prepare db f (params, nparams, sql, prep) =
     lwt stmt =
@@ -285,7 +287,7 @@ struct
               profile_prepare_stmt sql
                 (fun () -> return (Sqlite3.prepare db sql))
           | Some r -> match !r with
-                Some stmt -> check_ok ~stmt Sqlite3.reset stmt >> return stmt
+                Some stmt -> check_ok ~stmt db Sqlite3.reset stmt >> return stmt
               | None ->
                   profile_prepare_stmt sql
                     (fun () ->
@@ -299,7 +301,7 @@ struct
       | hd :: tl -> f i hd >> iteri ~i:(i + 1) f tl
     in
       (* the list of params is reversed *)
-      iteri (fun n v -> check_ok ~stmt (Sqlite3.bind stmt (nparams - n)) v) params >>
+      iteri (fun n v -> check_ok ~stmt db (Sqlite3.bind stmt (nparams - n)) v) params >>
       profile_execute_sql sql ~params (fun () -> f stmt)
 
   let do_select f db p =
@@ -308,11 +310,12 @@ struct
        if p.cacheable then Some p.prepared_statement else None)
 
   let execute db (p : ('a, unit M.t) statement) =
-    do_select (fun stmt -> check_ok ~stmt Sqlite3.step stmt) db p
+    do_select (fun stmt -> check_ok ~stmt db Sqlite3.step stmt) db p
 
   let insert db p =
     do_select
-      (fun stmt -> check_ok ~stmt Sqlite3.step stmt >> return (Sqlite3.last_insert_rowid db))
+      (fun stmt -> check_ok ~stmt db Sqlite3.step stmt >>
+                   return (Sqlite3.last_insert_rowid db))
       db p
 
   let check_num_cols s stmt expr =
@@ -343,7 +346,7 @@ struct
                  lwt x = f (snd expr.get_data (Sqlite3.row_data stmt)) in
                    loop (x :: l)
              | Sqlite3.Rc.DONE -> return (List.rev l)
-             | rc -> raise_error rc
+             | rc -> raise_error db rc
          in ensure_reset_stmt stmt loop [])
       db
       expr.statement
@@ -357,7 +360,7 @@ struct
            match Sqlite3.step stmt with
                Sqlite3.Rc.ROW -> snd expr.get_data (Sqlite3.row_data stmt)
              | Sqlite3.Rc.DONE -> M.fail Not_found
-             | rc -> raise_error rc
+             | rc -> raise_error db rc
          end ())
       db
       expr.statement
@@ -368,13 +371,13 @@ struct
       fun () -> incr n; sprintf "__sqlexpr_sqlite_tx_%d_%d" pid !n
 
   let unsafe_execute db fmt =
-    ksprintf (fun sql -> check_ok (Sqlite3.exec db) sql) fmt
+    ksprintf (fun sql -> check_ok db (Sqlite3.exec db) sql) fmt
 
   let unsafe_execute_prof text db fmt =
     ksprintf
       (fun sql ->
          profile_prepare_stmt text (fun () -> ());
-         profile_execute_sql text (fun () -> check_ok (Sqlite3.exec db) sql))
+         profile_execute_sql text (fun () -> check_ok db (Sqlite3.exec db) sql))
       fmt
 
   let transaction db f =
@@ -404,7 +407,7 @@ struct
                    f acc (snd expr.get_data (Sqlite3.row_data stmt))
                  end >>= loop
              | Sqlite3.Rc.DONE -> return acc
-             | rc -> raise_error rc
+             | rc -> raise_error db rc
          in ensure_reset_stmt stmt loop init)
       db
       expr.statement
@@ -422,7 +425,7 @@ struct
                    f (snd expr.get_data (Sqlite3.row_data stmt))
                  end >>= loop
              | Sqlite3.Rc.DONE -> return ()
-             | rc -> raise_error rc
+             | rc -> raise_error db rc
          in ensure_reset_stmt stmt loop ())
       db
       expr.statement
