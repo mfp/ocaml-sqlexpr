@@ -108,7 +108,6 @@ struct
   and ('a, 'b) statement =
       {
         sql_statement : string;
-        cacheable : bool;
         stmt_cache : Sqlite3.stmt IH.t option;
         directive : ('a, 'b) directive
       }
@@ -305,7 +304,6 @@ struct
   let make_statement ~cacheable sql directive =
     {
       sql_statement = sql;
-      cacheable = cacheable;
       stmt_cache = if cacheable then Some (IH.create 13) else None;
       directive = directive;
     }
