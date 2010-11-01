@@ -13,8 +13,7 @@ let init_db db =
             );"
 
 let fold_users db f acc =
-  S.fold db (fun acc x -> f x) acc
-    sql"SELECT @s{login}, @s{password}, @s?{email} FROM users"
+  S.fold db f acc sql"SELECT @s{login}, @s{password}, @s?{email} FROM users"
 
 let insert_user db ~login ~password ?name ?email () =
   S.insert db
