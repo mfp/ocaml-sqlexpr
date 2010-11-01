@@ -62,17 +62,18 @@ sig
     val maybe_bool : Sqlite3.Data.t -> bool option M.t
   end
 
-  type ('a, 'b) statement
+  type ('a, 'b) statement =
+      {
+        sql_statement : string;
+        stmt_id : string option;
+        directive : ('a, 'b) Directives.directive;
+      }
 
-  type ('a, 'b, 'c) expression
-
-  val make_statement :
-    cacheable:bool -> string ->
-    ('a, 'b) Directives.directive -> ('a, 'b) statement
-
-  val make_expression :
-    ('a, 'c) statement -> int -> (Sqlite3.Data.t array -> 'b) ->
-    ('a, 'b, 'c) expression
+  type ('a, 'b, 'c) expression =
+      {
+        statement : ('a, 'c) statement;
+        get_data : int * (Sqlite3.Data.t array -> 'b);
+      }
 
   val execute : db -> ('a, unit M.t) statement -> 'a
   val insert : db -> ('a, int64 M.t) statement -> 'a

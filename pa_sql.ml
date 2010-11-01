@@ -140,11 +140,21 @@ let create_sql_statement _loc ~cacheable sql_elms =
   let exp =
     List.fold_right
       (fun dir e -> <:expr< $directive_expr dir$ $e$ >>) sql_elms <:expr< $lid:k$ >> in
-  let cacheable = if cacheable then <:expr< True >> else <:expr< False >> in
+  let id =
+    let signature =
+      sprintf "%d-%f-%d-%S"
+        (Unix.getpid ()) (Unix.gettimeofday ()) (Random.int 0x3FFFFFF)
+        (sql_statement sql_elms)
+    in Digest.to_hex (Digest.string signature) in
+  let stmt_id =
+    if cacheable then <:expr< Some $str:id$ >> else <:expr< None >>
+  in
     <:expr<
-      Sqlexpr.make_statement ~cacheable:$cacheable$
-      $str:sql_statement sql_elms$
-      (fun [$lid:k$ -> fun [$lid:st$ -> $exp$ $lid:st$]]) >>
+      {
+        Sqlexpr.sql_statement = $str:sql_statement sql_elms$;
+        stmt_id = $stmt_id$;
+        directive = (fun [$lid:k$ -> fun [$lid:st$ -> $exp$ $lid:st$]])
+      } >>
 
 let create_sql_expression _loc ~cacheable (sql_elms : sql_element list) =
   let statement = create_sql_statement _loc ~cacheable sql_elms in
@@ -182,10 +192,12 @@ let create_sql_expression _loc ~cacheable (sql_elms : sql_element list) =
     in <:expr< fun [$lid:id$ -> $e$] >>
   in
     <:expr<
-      Sqlexpr.make_expression
-        $statement$
-        $int:string_of_int (List.length conv_exprs)$
-        $tuple_func$ >>
+      {
+        Sqlexpr.statement = $statement$;
+        get_data = ($int:string_of_int (List.length conv_exprs)$,
+                    $tuple_func$);
+      }
+    >>
 
 let expand_sql_literal ?(is_init = false) ~cacheable ctx _loc str =
   let sql_elms = parse (unescape _loc str) in
@@ -261,6 +273,7 @@ let expand_sqlite_check_functions ctx _loc =
   >>
 
 let _ =
+  Random.self_init ();
   register_expr_specifier "sql"
     (fun ctx _loc str -> expand_sql_literal ~cacheable:false ctx _loc str);
   register_expr_specifier "sqlinit"

@@ -22,7 +22,7 @@ type db =
       db : Sqlite3.db;
       id : int;
       stmts : WT.t;
-      mutable stmt_caches : Sqlite3.stmt IH.t list;
+      mutable cached_stmts : string list;
     }
 
 let () =
@@ -40,10 +40,12 @@ let new_id =
   let n = ref 0 in
     fun () -> incr n; !n
 
+let global_stmt_cache = Hashtbl.create 13
+
 let open_db fname =
   {
     db = Sqlite3.db_open fname; id = new_id (); stmts = WT.create 13;
-    stmt_caches = [];
+    cached_stmts = [];
   }
 
 let close_db db =
@@ -51,7 +53,15 @@ let close_db db =
     WT.iter
       (fun stmt -> ignore (Sqlite3.finalize stmt))
       db.stmts;
-    List.iter (fun cache -> IH.remove cache db.id) db.stmt_caches;
+    List.iter
+      (fun id ->
+         try
+           let key = (db.id, id) in
+           let stmt = Hashtbl.find global_stmt_cache key in
+             ignore (Sqlite3.finalize stmt);
+             Hashtbl.remove global_stmt_cache key
+         with Not_found -> ())
+      db.cached_stmts;
     ignore (Sqlite3.db_close db.db)
   with Sqlite3.Error _ -> () (* FIXME: raise? *)
 
@@ -103,12 +113,13 @@ module Directives =
 struct
   module D = Sqlite3.Data
 
-  type st = (Sqlite3.Data.t list * int * string * Sqlite3.stmt IH.t option)
+  (* (params, nparams, sql, stmt_id)  *)
+  type st = (Sqlite3.Data.t list * int * string * string option)
 
   and ('a, 'b) statement =
       {
         sql_statement : string;
-        stmt_cache : Sqlite3.stmt IH.t option;
+        stmt_id : string option;
         directive : ('a, 'b) directive
       }
 
@@ -284,7 +295,12 @@ struct
 
   open Directives
 
-  type ('a, 'b) statement = ('a, 'b) Directives.statement
+  type ('a, 'b) statement = ('a, 'b) Directives.statement =
+      {
+        sql_statement : string;
+        stmt_id : string option;
+        directive : ('a, 'b) directive
+      }
 
   type ('a, 'b, 'c) expression = {
     statement : ('a, 'c) statement;
@@ -301,15 +317,6 @@ struct
   let close_db = close_db
   let sqlite_db = sqlite_db
 
-  let make_statement ~cacheable sql directive =
-    {
-      sql_statement = sql;
-      stmt_cache = if cacheable then Some (IH.create 13) else None;
-      directive = directive;
-    }
-
-  let make_expression stmt n f = { statement = stmt; get_data = (n, f) }
-
   let rec check_ok ?stmt ?sql ?params db f x = match f x with
       Sqlite3.Rc.OK | Sqlite3.Rc.DONE -> return ()
     | Sqlite3.Rc.BUSY | Sqlite3.Rc.LOCKED ->
@@ -321,24 +328,28 @@ struct
 
   let maybe_not_found f x = try Some (f x) with Not_found -> None
 
-  let prepare db f (params, nparams, sql, cache) =
+  let prepare db f (params, nparams, sql, stmt_id) =
     lwt stmt =
       try_lwt
-        match cache with
+        match stmt_id with
             None ->
               profile_prepare_stmt sql
                 (fun () ->
                    let stmt = Sqlite3.prepare db.db sql in
                      WT.add db.stmts stmt;
                      return stmt)
-          | Some cache -> match maybe_not_found (IH.find cache) db.id with
+          | Some id ->
+              match maybe_not_found
+                      (Hashtbl.find global_stmt_cache)
+                      (db.id, id)
+              with
                 Some stmt -> check_ok ~stmt db Sqlite3.reset stmt >> return stmt
               | None ->
                   profile_prepare_stmt sql
                     (fun () ->
                        let stmt = Sqlite3.prepare db.db sql in
-                         IH.add cache db.id stmt;
-                         db.stmt_caches <- cache :: db.stmt_caches;
+                         Hashtbl.add global_stmt_cache (db.id, id) stmt;
+                         db.cached_stmts <- id :: db.cached_stmts;
                          WT.add db.stmts stmt;
                          return stmt)
       with e ->
@@ -354,7 +365,7 @@ struct
       profile_execute_sql sql ~params (fun () -> f stmt sql params)
 
   let do_select f db p =
-    p.directive (prepare db f) ([], 0, p.sql_statement, p.stmt_cache)
+    p.directive (prepare db f) ([], 0, p.sql_statement, p.stmt_id)
 
   let execute db (p : ('a, unit M.t) statement) =
     do_select (fun stmt sql params ->
