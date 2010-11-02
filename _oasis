@@ -1,6 +1,6 @@
 OASISFormat: 0.2
 Name:        ocaml-sqlexpr
-Version:     0.2.0
+Version:     0.2.1
 Synopsis:    Type-safe, convenient SQLite database access.
 Authors:     Mauricio Fernandez <mfp@acm.org>
 License:     LGPL-2.1 with OCaml linking exception
@@ -34,7 +34,7 @@ Library sqlexpr
   BuildTools:       ocamlbuild
   Modules:          Sqlexpr_concurrency,
                     Sqlexpr_sqlite
-  BuildDepends:     csv, extlib, sqlite3, estring, lwt, lwt.syntax
+  BuildDepends:     csv, extlib, sqlite3, estring, lwt, lwt.syntax, unix
   XMETADescription: SQLite database access.
 
 Library "sqlexpr_syntax"
@@ -44,5 +44,6 @@ Library "sqlexpr_syntax"
   Modules:          Pa_sql
   BuildDepends:     camlp4.lib, camlp4.quotations.r, estring
   XMETADescription: Syntax extension for SQL statements/expressions
+  XMETAType:        syntax
   XMETARequires:    camlp4, estring
   
