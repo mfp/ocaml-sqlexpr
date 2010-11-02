@@ -1,0 +1,18 @@
+# OASIS_START
+# DO NOT EDIT (digest: a296631283b6d080003475176b04a0d9)
+version = "0.2.0"
+description = "SQLite database access."
+requires = "csv extlib sqlite3 estring lwt lwt.syntax"
+archive(byte) = "sqlexpr.cma"
+archive(native) = "sqlexpr.cmxa"
+exists_if = "sqlexpr.cma"
+package "syntax" (
+ version = "0.2.0"
+ description = "Syntax extension for SQL statements/expressions"
+ requires = "camlp4 estring"
+ archive(byte) = "sqlexpr_syntax.cma"
+ archive(native) = "sqlexpr_syntax.cmxa"
+ exists_if = "sqlexpr_syntax.cma"
+)
+# OASIS_STOP
+
