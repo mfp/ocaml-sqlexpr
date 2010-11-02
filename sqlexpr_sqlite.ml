@@ -22,7 +22,6 @@ type db =
       db : Sqlite3.db;
       id : int;
       stmts : WT.t;
-      mutable cached_stmts : string list;
     }
 
 let () =
@@ -40,12 +39,35 @@ let new_id =
   let n = ref 0 in
     fun () -> incr n; !n
 
-let global_stmt_cache = Hashtbl.create 13
+module Stmt_cache =
+struct
+  module H = Hashtbl
+  let global_stmt_cache = H.create 13
+
+  let flush_stmts db = H.remove global_stmt_cache db.id
+
+  let find_remove_stmt db id =
+    try
+      let h = H.find global_stmt_cache db.id in
+      let r = H.find h id in
+        H.remove h id;
+        Some r
+    with Not_found -> None
+
+  let add_stmt db id stmt =
+    let h =
+      try
+        H.find global_stmt_cache db.id
+      with Not_found ->
+        let h = H.create 13 in
+          H.add global_stmt_cache db.id h;
+          h
+    in H.add h id stmt
+end
 
 let open_db fname =
   {
     db = Sqlite3.db_open fname; id = new_id (); stmts = WT.create 13;
-    cached_stmts = [];
   }
 
 let close_db db =
@@ -53,15 +75,7 @@ let close_db db =
     WT.iter
       (fun stmt -> ignore (Sqlite3.finalize stmt))
       db.stmts;
-    List.iter
-      (fun id ->
-         try
-           let key = (db.id, id) in
-           let stmt = Hashtbl.find global_stmt_cache key in
-             ignore (Sqlite3.finalize stmt);
-             Hashtbl.remove global_stmt_cache key
-         with Not_found -> ())
-      db.cached_stmts;
+    Stmt_cache.flush_stmts db;
     ignore (Sqlite3.db_close db.db)
   with Sqlite3.Error _ -> () (* FIXME: raise? *)
 
@@ -339,17 +353,20 @@ struct
                      WT.add db.stmts stmt;
                      return stmt)
           | Some id ->
-              match maybe_not_found
-                      (Hashtbl.find global_stmt_cache)
-                      (db.id, id)
-              with
-                Some stmt -> check_ok ~stmt db Sqlite3.reset stmt >> return stmt
+              match Stmt_cache.find_remove_stmt db id with
+                Some stmt ->
+                  begin try_lwt
+                    check_ok ~stmt db Sqlite3.reset stmt
+                  with e ->
+                    (* drop the stmt *)
+                    ignore (Sqlite3.finalize stmt);
+                    fail e
+                  end >>
+                  return stmt
               | None ->
                   profile_prepare_stmt sql
                     (fun () ->
                        let stmt = Sqlite3.prepare db.db sql in
-                         Hashtbl.add global_stmt_cache (db.id, id) stmt;
-                         db.cached_stmts <- id :: db.cached_stmts;
                          WT.add db.stmts stmt;
                          return stmt)
       with e ->
@@ -362,7 +379,14 @@ struct
       iteri
         (fun n v -> check_ok ~sql ~stmt db (Sqlite3.bind stmt (nparams - n)) v)
         params >>
-      profile_execute_sql sql ~params (fun () -> f stmt sql params)
+      profile_execute_sql sql ~params
+        (fun () ->
+           try_lwt
+             f stmt sql params
+           finally
+             match stmt_id with
+                 Some id -> Stmt_cache.add_stmt db id stmt; return ()
+               | None -> return ())
 
   let do_select f db p =
     p.directive (prepare db f) ([], 0, p.sql_statement, p.stmt_id)
