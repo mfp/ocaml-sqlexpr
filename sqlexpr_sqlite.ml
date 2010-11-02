@@ -11,12 +11,6 @@ module WT = Weak.Make(struct
                         let equal = (==)
                       end)
 
-module IH = Hashtbl.Make(struct
-                           type t = int
-                           let hash n = n
-                           let equal = (==)
-                         end)
-
 type db =
     {
       db : Sqlite3.db;
@@ -41,14 +35,29 @@ let new_id =
 
 module Stmt_cache =
 struct
-  module H = Hashtbl
-  let global_stmt_cache = H.create 13
+  module IH = Hashtbl.Make(struct
+                             type t = int
+                             let hash n = n
+                             let equal = (==)
+                           end)
+  module H = Hashtbl.Make
+               (struct
+                  type t = string
+                  let hash s =
+                    Char.code (String.unsafe_get s 0) +
+                    Char.code (String.unsafe_get s 1) lsl 8 +
+                    Char.code (String.unsafe_get s 2) lsl 16 +
+                    Char.code (String.unsafe_get s 3) lsl 24
+                  let equal (s1 : string) s2 = s1 = s2
+                end)
 
-  let flush_stmts db = H.remove global_stmt_cache db.id
+  let global_stmt_cache = IH.create 13
+
+  let flush_stmts db = IH.remove global_stmt_cache db.id
 
   let find_remove_stmt db id =
     try
-      let h = H.find global_stmt_cache db.id in
+      let h = IH.find global_stmt_cache db.id in
       let r = H.find h id in
         H.remove h id;
         Some r
@@ -57,10 +66,10 @@ struct
   let add_stmt db id stmt =
     let h =
       try
-        H.find global_stmt_cache db.id
+        IH.find global_stmt_cache db.id
       with Not_found ->
         let h = H.create 13 in
-          H.add global_stmt_cache db.id h;
+          IH.add global_stmt_cache db.id h;
           h
     in H.add h id stmt
 end
