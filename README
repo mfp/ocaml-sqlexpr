@@ -1,23 +1,61 @@
 
-Minimalistic syntax extension for type-safe, convenient execution of SQL
-statements.
+Minimalistic library and syntax extension for type-safe, convenient execution
+of SQL statements. Currently compatible with Sqlite3.
 
-Sample usage on the toplevel:
+Sqlexpr features:
+* automated prepared statement caching, param binding, data extraction, error
+  checking (including automatic stmt reset to avoid BUSY/LOCKED errors in
+  subsequent queries), stmt finalization on db close, etc.
+* HOFs like iter, fold, transaction
+* support for different concurrency models: everything is functorized over a
+  THREAD monad, so you can for instance do concurrent folds/iters with Lwt
+* support for SQL stmt syntax checks and some extra semantic checking (column
+  names, etc)
 
-# #load "pa_sql.cmo";;
-# open Sqlexpr_sqlite;;
-# type user = { name : string; age : int };;
-type user = { name : string; age : int }
-# let insert_user db u = insert db sql"insert into users values(%s, %d)" u.name u.age;;
-value insert_user : Sqlexpr_sqlite.db -> user -> int64 = <fun>
-# let s = sql"create table users(name varchar(255) unique not null primary key, age integer)";;
-value s  : Sqlexpr_sqlite.Sqlexpr.statement '_a '_a = <abstr>
-# let create_tbl db = execute db s;;
-value create_tbl : Sqlexpr_sqlite.db -> unit = <fun>
-# let sel_with_age = sql"select @s{name} from users where age = %d";;
-value sel_with_age :
-  Sqlexpr_sqlite.Sqlexpr.expression (int -> '_a) string '_a = <abstr>
-# let with_age db age = select db sel_with_age age;;
-value with_age : Sqlexpr_sqlite.db -> int -> list string = <fun>
+Sqlexpr is used as follows:
 
+    module Sqlexpr = Sqlexpr_sqlite.Make(Sqlexpr_concurrency.Id)
+    module S = Sqlexpr
+
+    let () =
+      let db = S.open_db "foo.db" in
+      S.iter db
+        (fun (n, p) -> Printf.printf "User %S, password %S\n" n p)
+        sqlc"SELECT @s{login}, @s{password} FROM users";
+      List.iter
+        (fun (n, p) -> S.execute db sqlc"INSERT INTO users VALUES(%s, %s) n p)
+        [
+         "coder24", "badpass";
+         "tokyo3", "12345"
+        ]
+
+See also example.ml.
+
+Sqlexpr includes a syntax extension to build type-safe SQL
+statements/expressions:
+
+
+  sql"..."   denotes a SQL statement expression
+  sqlc"..."  denotes a SQL statement/expression that is to be cached
+
+  sql_check"sqlite" returns a tuple of functions to initialize, check the
+                    validity of the SQL statements/expressions and
+                    check against an auto-initialized temporary database.
+
+  sqlinit"..." is equivalent to sql"...", but the statement will be added
+               to the list of statements to be executed in the automatically
+               generated initialization function
+
+sql_check"sqlite" is used as follows:
+
+  let auto_init_db, check_db, auto_check_db = sql_check"sqlite"
+
+which creates 3 functions
+
+  val auto_init_db : Sqlite3.db -> Format.formatter -> bool
+  val check_db : Sqlite3.db -> Format.formatter -> bool
+  val auto_check_db : Format.formatter -> bool
+
+each of them returns [false] on error, and writes the error messages to the
+provided formatter.
 
