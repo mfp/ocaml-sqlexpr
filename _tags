@@ -1,5 +1,16 @@
 <**/*.ml>: syntax_camlp4o
 
 # OASIS_START
-# DO NOT EDIT (digest: d41d8cd98f00b204e9800998ecf8427e)
+# DO NOT EDIT (digest: a76fa61cd2c4fa324ce5b25ef2740719)
+# Library sqlexpr_syntax
+<*.ml{,i}>: pkg_camlp4.quotations.r
+<*.ml{,i}>: pkg_camlp4.lib
+# Library sqlexpr
+<*.ml{,i}>: pkg_unix
+<*.ml{,i}>: pkg_sqlite3
+<*.ml{,i}>: pkg_lwt.syntax
+<*.ml{,i}>: pkg_lwt
+<*.ml{,i}>: pkg_extlib
+<*.ml{,i}>: pkg_estring
+<*.ml{,i}>: pkg_csv
 # OASIS_STOP
