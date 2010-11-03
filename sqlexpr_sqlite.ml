@@ -18,6 +18,9 @@ type db =
       stmts : WT.t;
     }
 
+(* (params, nparams, sql, stmt_id)  *)
+type st = (Sqlite3.Data.t list * int * string * string option)
+
 let () =
   Printexc.register_printer
     (function
@@ -136,10 +139,7 @@ module Directives =
 struct
   module D = Sqlite3.Data
 
-  (* (params, nparams, sql, stmt_id)  *)
-  type st = (Sqlite3.Data.t list * int * string * string option)
-
-  and ('a, 'b) statement =
+  type ('a, 'b) statement =
       {
         sql_statement : string;
         stmt_id : string option;
