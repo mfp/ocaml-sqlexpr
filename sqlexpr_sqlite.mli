@@ -1,6 +1,8 @@
 (** Sqlexpr access to SQLite databases. *)
 
+(** Database handle. *)
 type db
+
 (** Type used internally. *)
 type st
 
