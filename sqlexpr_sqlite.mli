@@ -7,12 +7,12 @@ type db
 type st
 
 (** All the exceptions raised by the code in {Sqlexpr_sqlite} are wrapped in
-  * Error except when indicated otherwise. *)
+    Error except when indicated otherwise. *)
 exception Error of exn
 
 (** Errors reported by SQLite are converted into [Sqlite_error _] exceptions,
-  * so they can be matched with
-  * [try ... with Sqlexpr.Error (Sqlexpr.sqlite_error _)] *)
+    so they can be matched with
+    [try ... with Sqlexpr.Error (Sqlexpr.sqlite_error _)] *)
 exception Sqlite_error of string * Sqlite3.Rc.t
 
 (** Open the DB whose filename is given. [":memory:"] refers to an in-mem DB. *)
@@ -43,12 +43,12 @@ sig
       }
 
   (** Exception identical to the toplevel [Error], provided for convenience.
-    * Note that [Sqlexpr_sqlite.Error _] matches this exception. *)
+      Note that [Sqlexpr_sqlite.Error _] matches this exception. *)
   exception Error of exn
 
   (** Exception identical to the toplevel [Sqlite_error], provided for
-    * convenience.  Note that [Sqlexpr_sqlite.Sqlite_error _] matches this
-    * exception. *)
+      convenience.  Note that [Sqlexpr_sqlite.Sqlite_error _] matches this
+      exception. *)
   exception Sqlite_error of string * Sqlite3.Rc.t
   (** Same as the top-level one, provided for convenience. *)
   val open_db : string -> db
@@ -63,32 +63,32 @@ sig
   val execute : db -> ('a, unit M.t) statement -> 'a
 
   (** Execute an INSERT SQL statement and return the last inserted row id.
-    * Example:
-    * [insert db sqlc"INSERT INTO users(name, pass) VALUES(%s, %s)" name pass]
-    * *)
+      Example:
+      [insert db sqlc"INSERT INTO users(name, pass) VALUES(%s, %s)" name pass]
+      *)
   val insert : db -> ('a, int64 M.t) statement -> 'a
 
   (** "Select" a SELECT SQL expression and return a list of tuples; e.g.
-    *  [select db sqlc"SELECT \@s\{name\}, \@s\{pass\} FROM users"]
-    *  [select db sqlc"SELECT \@s\{pass\} FROM users WHERE id = %L" user_id]
-    * *)
+       [select db sqlc"SELECT \@s\{name\}, \@s\{pass\} FROM users"]
+       [select db sqlc"SELECT \@s\{pass\} FROM users WHERE id = %L" user_id]
+      *)
   val select : db -> ('c, 'a M.t, 'a list M.t) expression -> 'c
 
   (** [select_f db f expr ...] is similar to [select db expr ...] but maps the
-    * results using the provided [f] function. *)
+      results using the provided [f] function. *)
   val select_f : db -> ('a -> 'b M.t) -> ('c, 'a, 'b list M.t) expression -> 'c
 
   (** [select_one db expr ...] takes the first result from
-    * [select db expr ...].  @raise Not_found if no row is found. *)
+      [select db expr ...].  @raise Not_found if no row is found. *)
   val select_one : db -> ('c, 'a M.t, 'a M.t) expression -> 'c
 
   (** Run the provided function in a DB transaction. A rollback is performed
-    * if an exception is raised inside the transaction. *)
+      if an exception is raised inside the transaction. *)
   val transaction : db -> (db -> 'a M.t) -> 'a M.t
 
   (** [fold db f a expr ...] is
-    * [f (... (f (f a r1) r2) ...) rN]
-    * where [rN] is the n-th row returned for the SELECT expression [expr]. *)
+      [f (... (f (f a r1) r2) ...) rN]
+      where [rN] is the n-th row returned for the SELECT expression [expr]. *)
   val fold :
     db -> ('a -> 'b -> 'a M.t) -> 'a -> ('c, 'b, 'a M.t) expression -> 'c
 
