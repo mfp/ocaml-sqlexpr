@@ -19,9 +19,10 @@ gmon.out
 /META
 /Makefile
 /configure
-/exp.ml
 /myocamlbuild.ml
 /setup.ml
+/setup.data
+/setup.log
 /sqlexpr.mllib
 /sqlexpr_syntax.mllib
 
