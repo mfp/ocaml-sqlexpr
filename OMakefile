@@ -29,6 +29,25 @@ section
     OCamlProgram(t_sqlexpr_sqlite, t_sqlexpr_sqlite)
     $(addsuffixes .o .cmx .cmi .cmo, t_sqlexpr_sqlite):
 
+section
+    VERSION = $(shell oasis query Version | tail -1)
+    NAME = ocaml-sqlexpr-$(VERSION)
+    DATE = $(shell date +%F)
+    BRANCH = $(VERSION)_$(DATE)
+
+    .PHONY: release
+    release:
+        git checkout -b $(BRANCH)
+	oasis setup
+	git add -f META Makefile _tags configure myocamlbuild.ml \
+	           setup.ml sqlexpr.mllib sqlexpr_syntax.mllib
+	git commit -m "Add OASIS-generated build system."
+	git archive -v --prefix $(NAME)/ -o $(NAME).tar HEAD
+	rm -f $(NAME).tar.gz
+	gzip $(NAME).tar
+	git checkout master
+	git branch -D $(BRANCH)
+
 .DEFAULT: pa_sql.cmo sqlexpr.cma sqlexpr.cmxa
 
 .PHONY: test
