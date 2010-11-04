@@ -1,10 +1,16 @@
 (** Sqlexpr access to SQLite databases. *)
 
-(** Database handle. *)
-type db
+(** Module with the types defined in Sqlexpr_sqlite, provided for convenience *)
+module Types : sig
+  (** Database handle. *)
+  type db
 
-(** Type used internally. *)
-type st
+  (** Type used internally. *)
+  type st
+end
+
+type db = Types.db
+type st = Types.st
 
 (** All the exceptions raised by the code in {Sqlexpr_sqlite} are wrapped in
     Error except when indicated otherwise. *)
@@ -41,6 +47,9 @@ sig
         statement : ('a, 'c) statement;
         get_data : int * (Sqlite3.Data.t array -> 'b);
       }
+
+  (** Database type, provided for convenience. *)
+  type db = Types.db
 
   (** Exception identical to the toplevel [Error], provided for convenience.
       Note that [Sqlexpr_sqlite.Error _] matches this exception. *)

@@ -11,15 +11,20 @@ module WT = Weak.Make(struct
                         let equal = (==)
                       end)
 
-type db =
-    {
-      db : Sqlite3.db;
-      id : int;
-      stmts : WT.t;
-    }
+module Types =
+struct
+  type db =
+      {
+        db : Sqlite3.db;
+        id : int;
+        stmts : WT.t;
+      }
 
-(* (params, nparams, sql, stmt_id)  *)
-type st = (Sqlite3.Data.t list * int * string * string option)
+  (* (params, nparams, sql, stmt_id)  *)
+  type st = (Sqlite3.Data.t list * int * string * string option)
+end
+
+include Types
 
 let () =
   Printexc.register_printer
