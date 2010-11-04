@@ -80,6 +80,11 @@ Input parameters are denoted with %X where X is one of:
   %b                 bool
   %a                 ('a -> string) (resulting string handled as BLOB by SQLite)
 
+A literal '%' is denoted with '%%'.
+
+A parameter is made nullable (turning the OCaml type into a [_ option]) by
+appending a '?', e.g. '%d?'.
+
 Output parameters are denoted with @X{SQL expression} where X is one of:
 
   output parameter   OCaml type
@@ -92,15 +97,18 @@ Output parameters are denoted with @X{SQL expression} where X is one of:
   @f                 float
   @b                 bool
 
-A literal '@' is presented with '@@'.
+A literal '@' is denoted with '@@'.
+As in the case of input parameters, output parameters can be made nullable by
+appending a '?'.
 
 A sql"..." or sqlc"..." literal is of type [_ statement] if it has no output
 parameters, and of type [_ expression] if it has at least one.
 
 Examples:
 
-   sql"SELECT @{name} FROM users"                    is an expression
-   sql"SELECT @{name} FROM users WHERE id = %d"      is an expression
+   sql"SELECT @s{name} FROM users"                   is an expression
+   sql"SELECT @s{name} FROM users WHERE id = %d"     is an expression
+   sql"SELECT @s{name}, @s{email} FROM users"        is an expression
    sql"DELETE FROM users WHERE id = %d"              is a statement
 
 Statements are executed with [execute] or [insert] (which returns the id of
@@ -112,10 +120,11 @@ Examples:
     module Sqlexpr = Sqlexpr_sqlite.Make(Sqlexpr_concurrency.Id)
     module S = Sqlexpr
 
-    let insert_user_stmt = sqlc"INSERT INTO users(login, password) VALUES(%s, %s)"
+    let insert_user_stmt =
+        sqlc"INSERT INTO users(login, password, email) VALUES(%s, %s, %s?)"
 
-    let insert_user db ~login ~password =
-      S.execute db insert_user_stmt login password
+    let insert_user db ~login ?email ~password =
+      S.execute db insert_user_stmt login password email
 
     (* insert user and return ID; we use partial application here *)
     let new_user_id db = S.insert db insert_user_stmt
@@ -123,7 +132,10 @@ Examples:
     let get_password db =
       S.select_one db sqlc"SELECT @s{password} FROM users WHERE login = %s"
 
-    let iter_users db f =
-      S.iter db f sqlc"SELECT @L{id}, @s{login}, @s{password} FROM users"
+    let get_email db =
+      S.select_one db sqlc"SELECT @s?{email} FROM users WHERE login = %s"
 
+    let iter_users db f =
+      S.iter db f sqlc"SELECT @L{id}, @s{login}, @s{password}, @s?{email}
+                         FROM users"
 
