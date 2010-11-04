@@ -1,6 +1,8 @@
 
-Minimalistic library and syntax extension for type-safe, convenient execution
-of SQL statements. Currently compatible with Sqlite3.
+ocaml-sqlexpr is a simple library and syntax extension for type-safe,
+convenient execution of SQL statements, currently compatible with Sqlite3.
+
+The latest version can be found at https://github.com/mfp/ocaml-sqlexpr
 
 Sqlexpr features:
 * automated prepared statement caching, param binding, data extraction, error
@@ -31,7 +33,10 @@ Sqlexpr is used as follows:
 
 See also example.ml.
 
-Sqlexpr includes a syntax extension to build type-safe SQL
+Syntax extension
+================
+
+ocaml-sqlexpr includes a syntax extension to build type-safe SQL
 statements/expressions:
 
 
@@ -59,8 +64,8 @@ which creates 3 functions
 each of them returns [false] on error, and writes the error messages to the
 provided formatter.
 
-Syntax in sql statements/expressions
-====================================
+SQL statement/expression syntax
+-------------------------------
 
 sql/sqlc literals are similar to Printf's format strings and their precise
 types depend on their contents. They accept input parameters (similarly to
