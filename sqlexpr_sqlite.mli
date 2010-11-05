@@ -81,7 +81,7 @@ sig
        [select db sqlc"SELECT \@s\{name\}, \@s\{pass\} FROM users"]
        [select db sqlc"SELECT \@s\{pass\} FROM users WHERE id = %L" user_id]
       *)
-  val select : db -> ('c, 'a M.t, 'a list M.t) expression -> 'c
+  val select : db -> ('c, 'a, 'a list M.t) expression -> 'c
 
   (** [select_f db f expr ...] is similar to [select db expr ...] but maps the
       results using the provided [f] function. *)
@@ -132,21 +132,21 @@ sig
   (** Module used by the code generated for SQL literals. *)
   module Conversion :
   sig
-    val text : Sqlite3.Data.t -> string M.t
-    val blob : Sqlite3.Data.t -> string M.t
-    val int : Sqlite3.Data.t -> int M.t
-    val int32 : Sqlite3.Data.t -> int32 M.t
-    val int64 : Sqlite3.Data.t -> int64 M.t
-    val float : Sqlite3.Data.t -> float M.t
-    val bool : Sqlite3.Data.t -> bool M.t
-    val maybe : (Sqlite3.Data.t -> 'a M.t) -> Sqlite3.Data.t -> 'a option M.t
-    val maybe_text : Sqlite3.Data.t -> string option M.t
-    val maybe_blob : Sqlite3.Data.t -> string option M.t
-    val maybe_int : Sqlite3.Data.t -> int option M.t
-    val maybe_int32 : Sqlite3.Data.t -> int32 option M.t
-    val maybe_int64 : Sqlite3.Data.t -> int64 option M.t
-    val maybe_float : Sqlite3.Data.t -> float option M.t
-    val maybe_bool : Sqlite3.Data.t -> bool option M.t
+    val text : Sqlite3.Data.t -> string
+    val blob : Sqlite3.Data.t -> string
+    val int : Sqlite3.Data.t -> int
+    val int32 : Sqlite3.Data.t -> int32
+    val int64 : Sqlite3.Data.t -> int64
+    val float : Sqlite3.Data.t -> float
+    val bool : Sqlite3.Data.t -> bool
+    val maybe : (Sqlite3.Data.t -> 'a) -> Sqlite3.Data.t -> 'a option
+    val maybe_text : Sqlite3.Data.t -> string option
+    val maybe_blob : Sqlite3.Data.t -> string option
+    val maybe_int : Sqlite3.Data.t -> int option
+    val maybe_int32 : Sqlite3.Data.t -> int32 option
+    val maybe_int64 : Sqlite3.Data.t -> int64 option
+    val maybe_float : Sqlite3.Data.t -> float option
+    val maybe_bool : Sqlite3.Data.t -> bool option
   end
 end
 

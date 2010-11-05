@@ -198,38 +198,37 @@ struct
   let maybe_any k st f x = maybe_blob k st (Option.map f x)
 end
 
-module MkConversion(M : THREAD) =
+module Conversion =
 struct
   open Sqlite3.Data
-  module Lwt = M
-  open Lwt
-  include Error(M)
+
+  let failwithfmt fmt = ksprintf failwith fmt
 
   let error s =
     failwithfmt "Sqlexpr_sqlite error: bad data (expected %s)" s
 
   let text = function
-      TEXT s | BLOB s -> return s
-    | INT n -> return (Int64.to_string n)
-    | FLOAT f -> return (string_of_float f)
+      TEXT s | BLOB s -> s
+    | INT n -> Int64.to_string n
+    | FLOAT f -> string_of_float f
     | _ -> error "text"
 
-  let blob = function BLOB s | TEXT s -> return s | _ -> error "blob"
+  let blob = function BLOB s | TEXT s -> s | _ -> error "blob"
 
-  let int = function INT n -> return (Int64.to_int n) | _ -> error "int"
-  let int32 = function INT n -> return (Int64.to_int32 n) | _ -> error "int"
-  let int64 = function INT n -> return n | _ -> error "int"
+  let int = function INT n -> Int64.to_int n | _ -> error "int"
+  let int32 = function INT n -> Int64.to_int32 n | _ -> error "int"
+  let int64 = function INT n -> n | _ -> error "int"
 
-  let bool = function INT 0L -> return false | INT _ -> return true | _ -> error "int"
+  let bool = function INT 0L -> false | INT _ -> true | _ -> error "int"
 
   let float = function
-      INT n -> return (Int64.to_float n)
-    | FLOAT n -> return n
+      INT n -> Int64.to_float n
+    | FLOAT n -> n
     | _ -> error "float"
 
   let maybe f = function
-      NULL -> return None
-    | x -> lwt y = f x in return (Some y)
+      NULL -> None
+    | x -> Some (f x)
 
   let maybe_text = maybe text
   let maybe_blob = maybe blob
@@ -319,7 +318,7 @@ struct
   include Error(Lwt)
 
   module Directives = Directives
-  module Conversion = MkConversion(M)
+  module Conversion = Conversion
 
   open Directives
 
@@ -449,7 +448,7 @@ struct
       db
       expr.statement
 
-  let select db expr = select_f db (fun x -> x) expr
+  let select db expr = select_f db (fun x -> return x) expr
 
   let select_one db expr =
     do_select
