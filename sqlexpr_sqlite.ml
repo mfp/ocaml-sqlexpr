@@ -440,7 +440,7 @@ struct
            match Sqlite3.step stmt with
                Sqlite3.Rc.ROW ->
                  check_num_cols "select" stmt expr >>
-                 lwt x = f (snd expr.get_data (Sqlite3.row_data stmt)) in
+                 lwt x = try_lwt f (snd expr.get_data (Sqlite3.row_data stmt)) in
                    loop (x :: l)
              | Sqlite3.Rc.DONE -> return (List.rev l)
              | rc -> raise_error ~sql ~params db rc
@@ -455,7 +455,8 @@ struct
       (fun stmt sql params ->
          ensure_reset_stmt stmt begin fun () ->
            match Sqlite3.step stmt with
-               Sqlite3.Rc.ROW -> snd expr.get_data (Sqlite3.row_data stmt)
+               Sqlite3.Rc.ROW ->
+                 try_lwt return (snd expr.get_data (Sqlite3.row_data stmt))
              | Sqlite3.Rc.DONE -> M.fail Not_found
              | rc -> raise_error ~sql ~params db rc
          end ())

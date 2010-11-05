@@ -89,7 +89,7 @@ sig
 
   (** [select_one db expr ...] takes the first result from
       [select db expr ...].  @raise Not_found if no row is found. *)
-  val select_one : db -> ('c, 'a M.t, 'a M.t) expression -> 'c
+  val select_one : db -> ('c, 'a, 'a M.t) expression -> 'c
 
   (** Run the provided function in a DB transaction. A rollback is performed
       if an exception is raised inside the transaction. *)
