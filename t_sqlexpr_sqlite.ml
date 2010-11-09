@@ -185,6 +185,28 @@ let test_fold_and_iter () =
           aeq_int ~msg:"iter: sum of elements" sum !sum';
   end ()
 
+let test_nested_iter_and_fold () =
+  with_db begin fun db () ->
+    S.execute db sql"CREATE TABLE foo(n INTEGER NOT NULL)";
+    List.iter (S.execute db sqlc"INSERT INTO foo(n) VALUES(%d)") [1; 2; 3];
+    let q = Queue.create () in
+    let expected =
+      List.rev [ 1, 3; 1, 2; 1, 1; 2, 3; 2, 2; 2, 1; 3, 3; 3, 2; 3, 1; ] in
+    let inner = sqlc"SELECT @d{n} FROM foo ORDER BY n DESC" in
+    let outer = sqlc"SELECT @d{n} FROM foo ORDER BY n ASC" in
+    let printer (a, b) = sprintf "(%d, %d)" a b in
+      S.iter db
+        (fun a -> S.iter db (fun b -> Queue.push (a, b) q) inner)
+        outer;
+      aeq_list ~printer expected (Queue.fold (fun l x -> x :: l) [] q);
+      let l =
+        S.fold db
+          (fun l a -> S.fold db (fun l b -> (a, b) :: l) l inner)
+          []
+          outer
+      in aeq_list ~printer expected l
+  end ()
+
 let all_tests =
   [
     "Directives" >::: test_directives;
@@ -192,6 +214,7 @@ let all_tests =
     "Directives in output exprs" >:: test_oexpr_directives;
     "Transactions" >:: test_transaction;
     "Fold and iter" >:: test_fold_and_iter;
+    "Nested fold and iter" >:: test_nested_iter_and_fold;
   ]
 
 let _ =
