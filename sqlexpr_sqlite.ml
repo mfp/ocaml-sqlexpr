@@ -82,11 +82,6 @@ struct
     in H.add h id stmt
 end
 
-let open_db fname =
-  {
-    db = Sqlite3.db_open fname; id = new_id (); stmts = WT.create 13;
-  }
-
 let close_db db =
   try
     WT.iter
@@ -95,6 +90,14 @@ let close_db db =
     Stmt_cache.flush_stmts db;
     ignore (Sqlite3.db_close db.db)
   with Sqlite3.Error _ -> () (* FIXME: raise? *)
+
+let open_db fname =
+  let r =
+    {
+      db = Sqlite3.db_open fname; id = new_id (); stmts = WT.create 13;
+    }
+  in Gc.finalise close_db r;
+     r
 
 let sqlite_db db = db.db
 
