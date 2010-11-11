@@ -30,10 +30,10 @@ section
     $(addsuffixes .o .cmx .cmi .cmo, t_sqlexpr_sqlite):
 
 section
-    VERSION = $(shell oasis query Version | tail -1)
-    NAME = ocaml-sqlexpr-$(VERSION)
-    DATE = $(shell date +%F)
-    BRANCH = $(VERSION)_$(DATE)
+    VERSION = $`(shell oasis query Version | tail -1)
+    NAME = $`(string ocaml-sqlexpr-$(VERSION))
+    DATE = $`(shell date +%F)
+    BRANCH = $`(string $(VERSION)_$(DATE))
 
     .PHONY: release
     release:
