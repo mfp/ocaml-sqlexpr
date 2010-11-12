@@ -88,8 +88,25 @@ sig
   val select_f : db -> ('a -> 'b M.t) -> ('c, 'a, 'b list M.t) expression -> 'c
 
   (** [select_one db expr ...] takes the first result from
-      [select db expr ...].  @raise Not_found if no row is found. *)
+      [select db expr ...].
+      @raise Not_found if no row is found. *)
   val select_one : db -> ('c, 'a, 'a M.t) expression -> 'c
+
+  (** [select_one_maybe db expr ...] takes the first result from
+      [select db expr ...].
+      @return None if no row is found. *)
+  val select_one_maybe : db -> ('c, 'a, 'a option M.t) expression -> 'c
+
+  (** [select_one_f db f expr ...] is returns the first result from
+      [select_f db f expr ...].
+      @raise Not_found if no row is found. *)
+  val select_one_f : db -> ('a -> 'b M.t) -> ('c, 'a, 'b M.t) expression -> 'c
+
+  (** [select_one_f_maybe db expr ...] takes the first result from
+      [select_f db f expr ...].
+      @return None if no row is found. *)
+  val select_one_f_maybe : db -> ('a -> 'b M.t) ->
+    ('c, 'a, 'b option M.t) expression -> 'c
 
   (** Run the provided function in a DB transaction. A rollback is performed
       if an exception is raised inside the transaction. *)

@@ -453,18 +453,31 @@ struct
 
   let select db expr = select_f db (fun x -> return x) expr
 
-  let select_one db expr =
+  let select_one_f_aux db f not_found expr =
     do_select
       (fun stmt sql params ->
          ensure_reset_stmt stmt begin fun () ->
            match Sqlite3.step stmt with
                Sqlite3.Rc.ROW ->
-                 try_lwt return (snd expr.get_data (Sqlite3.row_data stmt))
-             | Sqlite3.Rc.DONE -> M.fail Not_found
+                 try_lwt f (snd expr.get_data (Sqlite3.row_data stmt))
+             | Sqlite3.Rc.DONE -> not_found ()
              | rc -> raise_error ~sql ~params db rc
          end ())
       db
       expr.statement
+
+  let select_one db expr =
+    select_one_f_aux db (fun x -> return x) (fun () -> M.fail Not_found) expr
+
+  let select_one_f db f expr =
+    select_one_f_aux db f (fun () -> M.fail Not_found) expr
+
+  let select_one_maybe db expr =
+    select_one_f_aux db (fun x -> return (Some x)) (fun () -> return None) expr
+
+  let select_one_f_maybe db f expr =
+    select_one_f_aux db
+      (fun x -> lwt y = f x in return (Some y)) (fun () -> return None) expr
 
   let new_tx_id =
     let pid = Unix.getpid () in
