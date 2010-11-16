@@ -19,6 +19,7 @@ section
 	pa_sql.cmi pa_sql.cmo: pa_sql.ml
 
 .SCANNER: scan-ocaml-%.ml: %.ml pa_sql.cmo
+.SCANNER: scan-ocaml-%.mli: %.mli pa_sql.cmo
 OCAMLFINDFLAGS += -syntax camlp4o -ppopt pa_sql.cmo
 
 OCamlLibrary(sqlexpr, sqlexpr_concurrency sqlexpr_sqlite)
