@@ -51,7 +51,6 @@ Document sqlexpr
     Title:                API reference for Sqlexpr
     Type:                 ocamlbuild (0.2)
     InstallDir:           $htmldir/sqlexpr
-    Install:              false
     BuildTools+:          ocamldoc
     XOCamlbuildPath:      .
     XOCamlbuildLibraries: sqlexpr
