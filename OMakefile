@@ -5,6 +5,8 @@ USE_OCAMLFIND = true
 OCAMLPACKS[] = csv extlib sqlite3 estring lwt lwt.syntax
 OCAMLFINDFLAGS = -syntax camlp4o
 
+OCAMLOPTFLAGS =
+
 OCAMLDEP_MODULES_ENABLED = false
 
 %.sig: %.ml %.cmo
