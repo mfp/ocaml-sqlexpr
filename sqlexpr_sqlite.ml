@@ -5,8 +5,33 @@ open ExtList
 exception Error of exn
 exception Sqlite_error of string * Sqlite3.Rc.t
 
+let raise_thread_error () =
+  raise (Error (Failure "Trying to run Sqlite3 function in different thread \
+                         than the one where the db was created."))
+
+let curr_thread_id () = Thread.id (Thread.self ())
+
+module Stmt =
+struct
+  type t = { thread_id : int; handle : Sqlite3.stmt }
+
+  let check_thread t =
+    if curr_thread_id () <> t.thread_id then raise_thread_error ()
+
+  let wrap f t = check_thread t; f t.handle
+
+  let prepare dbhandle sql =
+    { thread_id = curr_thread_id (); handle = Sqlite3.prepare dbhandle sql; }
+
+  let finalize = wrap Sqlite3.finalize
+  let reset = wrap Sqlite3.reset
+  let step = wrap Sqlite3.step
+  let bind t n v = check_thread t; Sqlite3.bind t.handle n v
+  let row_data = wrap Sqlite3.row_data
+end
+
 module WT = Weak.Make(struct
-                        type t = Sqlite3.stmt
+                        type t = Stmt.t
                         let hash = Hashtbl.hash
                         let equal = (==)
                       end)
@@ -15,7 +40,8 @@ module Types =
 struct
   type db =
       {
-        db : Sqlite3.db;
+        handle : Sqlite3.db;
+        thread_id : int;
         id : int;
         stmts : WT.t;
       }
@@ -40,6 +66,10 @@ let () =
 let new_id =
   let n = ref 0 in
     fun () -> incr n; !n
+
+let handle db =
+  if db.thread_id <> curr_thread_id () then raise_thread_error ();
+  db.handle
 
 module Stmt_cache =
 struct
@@ -85,21 +115,22 @@ end
 let close_db db =
   try
     WT.iter
-      (fun stmt -> ignore (Sqlite3.finalize stmt))
+      (fun stmt -> ignore (Stmt.finalize stmt))
       db.stmts;
     Stmt_cache.flush_stmts db;
-    ignore (Sqlite3.db_close db.db)
+    ignore (Sqlite3.db_close (handle db))
   with Sqlite3.Error _ -> () (* FIXME: raise? *)
 
 let open_db fname =
   let r =
     {
-      db = Sqlite3.db_open fname; id = new_id (); stmts = WT.create 13;
+      handle = Sqlite3.db_open fname; id = new_id (); stmts = WT.create 13;
+      thread_id = Thread.id (Thread.self ());
     }
   in Gc.finalise close_db r;
      r
 
-let sqlite_db db = db.db
+let sqlite_db db = db.handle
 
 module type THREAD = Sqlexpr_concurrency.THREAD
 
@@ -127,7 +158,7 @@ let string_of_params l = String.concat ", " (List.map string_of_param l)
 
 module Error(M : THREAD) =
 struct
-  let raise_error db ?sql ?params ?(errmsg = Sqlite3.errmsg db.db) errcode =
+  let raise_error db ?sql ?params ?(errmsg = Sqlite3.errmsg (handle db)) errcode =
     let msg = Sqlite3.Rc.to_string errcode ^ " " ^ errmsg in
     let msg = match sql with
         None -> msg
@@ -352,8 +383,8 @@ struct
     | Sqlite3.Rc.BUSY | Sqlite3.Rc.LOCKED ->
         M.sleep 0.010 >> check_ok ?sql ?stmt db f x
     | code ->
-        let errmsg = Sqlite3.errmsg db.db in
-          Option.may (fun stmt -> ignore (Sqlite3.reset stmt)) stmt;
+        let errmsg = Sqlite3.errmsg (handle db) in
+          Option.may (fun stmt -> ignore (Stmt.reset stmt)) stmt;
           raise_error db ?sql ?params ~errmsg code
 
   let maybe_not_found f x = try Some (f x) with Not_found -> None
@@ -365,24 +396,24 @@ struct
             None ->
               profile_prepare_stmt sql
                 (fun () ->
-                   let stmt = Sqlite3.prepare db.db sql in
+                   let stmt = Stmt.prepare (handle db) sql in
                      WT.add db.stmts stmt;
                      return stmt)
           | Some id ->
               match Stmt_cache.find_remove_stmt db id with
                 Some stmt ->
                   begin try_lwt
-                    check_ok ~stmt db Sqlite3.reset stmt
+                    check_ok ~stmt db Stmt.reset stmt
                   with e ->
                     (* drop the stmt *)
-                    ignore (Sqlite3.finalize stmt);
+                    ignore (Stmt.finalize stmt);
                     fail e
                   end >>
                   return stmt
               | None ->
                   profile_prepare_stmt sql
                     (fun () ->
-                       let stmt = Sqlite3.prepare db.db sql in
+                       let stmt = Stmt.prepare (handle db) sql in
                          WT.add db.stmts stmt;
                          return stmt)
       with e ->
@@ -393,7 +424,7 @@ struct
     in
       (* the list of params is reversed *)
       iteri
-        (fun n v -> check_ok ~sql ~stmt db (Sqlite3.bind stmt (nparams - n)) v)
+        (fun n v -> check_ok ~sql ~stmt db (Stmt.bind stmt (nparams - n)) v)
         params >>
       profile_execute_sql sql ~params
         (fun () ->
@@ -409,18 +440,18 @@ struct
 
   let execute db (p : ('a, unit M.t) statement) =
     do_select (fun stmt sql params ->
-                 check_ok ~sql ~params ~stmt db Sqlite3.step stmt) db p
+                 check_ok ~sql ~params ~stmt db Stmt.step stmt) db p
 
   let insert db p =
     do_select
       (fun stmt sql params ->
-         check_ok ~sql ~params ~stmt db Sqlite3.step stmt >>
-         return (Sqlite3.last_insert_rowid db.db))
+         check_ok ~sql ~params ~stmt db Stmt.step stmt >>
+         return (Sqlite3.last_insert_rowid (handle db)))
       db p
 
   let check_num_cols s stmt expr =
     let expected = fst expr.get_data in
-    let actual = Array.length (Sqlite3.row_data stmt) in
+    let actual = Array.length (Stmt.row_data stmt) in
       if expected = actual then return ()
       else
         failwithfmt
@@ -431,7 +462,7 @@ struct
     try_lwt
       f x
     finally
-      ignore (Sqlite3.reset stmt);
+      ignore (Stmt.reset stmt);
       return ()
 
   let select_f db f expr =
@@ -440,10 +471,10 @@ struct
          let auto_yield = M.auto_yield 0.01 in
          let rec loop l =
            auto_yield () >>
-           match Sqlite3.step stmt with
+           match Stmt.step stmt with
                Sqlite3.Rc.ROW ->
                  check_num_cols "select" stmt expr >>
-                 lwt x = try_lwt f (snd expr.get_data (Sqlite3.row_data stmt)) in
+                 lwt x = try_lwt f (snd expr.get_data (Stmt.row_data stmt)) in
                    loop (x :: l)
              | Sqlite3.Rc.DONE -> return (List.rev l)
              | rc -> raise_error ~sql ~params db rc
@@ -457,9 +488,9 @@ struct
     do_select
       (fun stmt sql params ->
          ensure_reset_stmt stmt begin fun () ->
-           match Sqlite3.step stmt with
+           match Stmt.step stmt with
                Sqlite3.Rc.ROW ->
-                 try_lwt f (snd expr.get_data (Sqlite3.row_data stmt))
+                 try_lwt f (snd expr.get_data (Stmt.row_data stmt))
              | Sqlite3.Rc.DONE -> not_found ()
              | rc -> raise_error ~sql ~params db rc
          end ())
@@ -485,14 +516,16 @@ struct
       fun () -> incr n; sprintf "__sqlexpr_sqlite_tx_%d_%d" pid !n
 
   let unsafe_execute db fmt =
-    ksprintf (fun sql -> check_ok ~sql db (Sqlite3.exec db.db) sql) fmt
+    ksprintf
+      (fun sql -> check_ok ~sql db (Sqlite3.exec (handle db)) sql)
+      fmt
 
   let unsafe_execute_prof text db fmt =
     ksprintf
       (fun sql ->
          profile_prepare_stmt text (fun () -> ());
          profile_execute_sql text (fun () ->
-         check_ok ~sql db (Sqlite3.exec db.db) sql))
+         check_ok ~sql db (Sqlite3.exec (handle db)) sql))
       fmt
 
   let transaction db f =
@@ -515,11 +548,11 @@ struct
          let auto_yield = M.auto_yield 0.01 in
          let rec loop acc =
            auto_yield () >>
-           match Sqlite3.step stmt with
+           match Stmt.step stmt with
                Sqlite3.Rc.ROW ->
                  begin try_lwt
                    check_num_cols "fold" stmt expr >>
-                   f acc (snd expr.get_data (Sqlite3.row_data stmt))
+                   f acc (snd expr.get_data (Stmt.row_data stmt))
                  end >>= loop
              | Sqlite3.Rc.DONE -> return acc
              | rc -> raise_error ~sql ~params db rc
@@ -533,11 +566,11 @@ struct
          let auto_yield = M.auto_yield 0.01 in
          let rec loop () =
            auto_yield () >>
-           match Sqlite3.step stmt with
+           match Stmt.step stmt with
                Sqlite3.Rc.ROW ->
                  begin try_lwt
                    check_num_cols "iter" stmt expr >>
-                   f (snd expr.get_data (Sqlite3.row_data stmt))
+                   f (snd expr.get_data (Stmt.row_data stmt))
                  end >>= loop
              | Sqlite3.Rc.DONE -> return ()
              | rc -> raise_error db ~sql ~params rc

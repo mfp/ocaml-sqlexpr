@@ -2,8 +2,9 @@ NATIVE_ENABLED = true
 BYTE_ENABLED = true
 
 USE_OCAMLFIND = true
-OCAMLPACKS[] = csv extlib sqlite3 estring lwt lwt.syntax
+OCAMLPACKS[] = csv extlib sqlite3 estring lwt lwt.syntax threads
 OCAMLFINDFLAGS = -syntax camlp4o
+OCAMLFLAGS += -thread
 
 OCAMLOPTFLAGS =
 

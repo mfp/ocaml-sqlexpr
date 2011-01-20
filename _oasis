@@ -34,7 +34,7 @@ Library sqlexpr
   BuildTools:       ocamlbuild
   Modules:          Sqlexpr_concurrency,
                     Sqlexpr_sqlite
-  BuildDepends:     csv, extlib, sqlite3, estring, lwt, lwt.syntax, unix
+  BuildDepends:     csv, extlib, sqlite3, estring, lwt, lwt.syntax, unix, threads
   XMETADescription: SQLite database access.
 
 Library "sqlexpr_syntax"
