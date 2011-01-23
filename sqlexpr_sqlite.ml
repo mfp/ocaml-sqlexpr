@@ -28,6 +28,7 @@ struct
   let step = wrap Sqlite3.step
   let bind t n v = check_thread t; Sqlite3.bind t.handle n v
   let row_data = wrap Sqlite3.row_data
+  let data_count = wrap Sqlite3.data_count
 end
 
 module WT = Weak.Make(struct
@@ -451,7 +452,7 @@ struct
 
   let check_num_cols s stmt expr =
     let expected = fst expr.get_data in
-    let actual = Array.length (Stmt.row_data stmt) in
+    let actual = Stmt.data_count stmt in
       if expected = actual then return ()
       else
         failwithfmt
