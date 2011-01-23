@@ -382,7 +382,7 @@ struct
   let rec check_ok ?stmt ?sql ?params db f x = match f x with
       Sqlite3.Rc.OK | Sqlite3.Rc.DONE -> return ()
     | Sqlite3.Rc.BUSY | Sqlite3.Rc.LOCKED ->
-        M.sleep 0.010 >> check_ok ?sql ?stmt db f x
+        M.sleep 0.010 >> check_ok ?sql ?stmt ?params db f x
     | code ->
         let errmsg = Sqlite3.errmsg (handle db) in
           Option.may (fun stmt -> ignore (Stmt.reset stmt)) stmt;
