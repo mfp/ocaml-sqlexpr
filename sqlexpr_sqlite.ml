@@ -23,7 +23,7 @@ struct
   let prepare dbhandle sql =
     { thread_id = curr_thread_id (); handle = Sqlite3.prepare dbhandle sql; }
 
-  let finalize = wrap Sqlite3.finalize
+  let finalize t = ignore (wrap Sqlite3.finalize t)
   let reset = wrap Sqlite3.reset
   let step = wrap Sqlite3.step
   let bind t n v = check_thread t; Sqlite3.bind t.handle n v
@@ -115,7 +115,7 @@ end
 let close_db db =
   try
     WT.iter
-      (fun stmt -> ignore (Stmt.finalize stmt))
+      (fun stmt -> Stmt.finalize stmt)
       db.stmts;
     Stmt_cache.flush_stmts db;
     ignore (Sqlite3.db_close (handle db))
@@ -406,7 +406,7 @@ struct
                     check_ok ~stmt db Stmt.reset stmt
                   with e ->
                     (* drop the stmt *)
-                    ignore (Stmt.finalize stmt);
+                    Stmt.finalize stmt;
                     fail e
                   end >>
                   return stmt
