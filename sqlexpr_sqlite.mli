@@ -2,14 +2,10 @@
 
 (** Module with the types defined in Sqlexpr_sqlite, provided for convenience *)
 module Types : sig
-  (** Database handle. *)
-  type db
-
   (** Type used internally. *)
   type st
 end
 
-type db = Types.db
 type st = Types.st
 
 (** All the exceptions raised by the code in {Sqlexpr_sqlite} are wrapped in
@@ -20,16 +16,6 @@ exception Error of exn
     so they can be matched with
     [try ... with Sqlexpr.Error (Sqlexpr.sqlite_error _)] *)
 exception Sqlite_error of string * Sqlite3.Rc.t
-
-(** Open the DB whose filename is given. [":memory:"] refers to an in-mem DB. *)
-val open_db : string -> db
-
-(** Close the DB and finalize all the associated prepared statements. *)
-val close_db : db -> unit
-
-(** Return the [Sqlite3.db] handle from a [db]. *)
-val sqlite_db : db -> Sqlite3.db
-
 
 module Make(M : Sqlexpr_concurrency.THREAD) :
 sig
@@ -48,8 +34,8 @@ sig
         get_data : int * (Sqlite3.Data.t array -> 'b);
       }
 
-  (** Database type, provided for convenience. *)
-  type db = Types.db
+  (** Database type *)
+  type db
 
   (** Exception identical to the toplevel [Error], provided for convenience.
       Note that [Sqlexpr_sqlite.Error _] matches this exception. *)
@@ -59,13 +45,15 @@ sig
       convenience.  Note that [Sqlexpr_sqlite.Sqlite_error _] matches this
       exception. *)
   exception Sqlite_error of string * Sqlite3.Rc.t
-  (** Same as the top-level one, provided for convenience. *)
+
+
+  (** Open the DB whose filename is given. [":memory:"] refers to an in-mem DB. *)
   val open_db : string -> db
 
-  (** Same as the top-level one, provided for convenience. *)
+  (** Close the DB and finalize all the associated prepared statements. *)
   val close_db : db -> unit
 
-  (** Same as the top-level one, provided for convenience. *)
+  (** Return the [Sqlite3.db] handle from a [db]. *)
   val sqlite_db : db -> Sqlite3.db
 
   (** Execute a SQL statement. *)
