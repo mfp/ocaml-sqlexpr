@@ -1,12 +1,13 @@
 (** Sqlexpr access to SQLite databases. *)
 
-(** Module with the types defined in Sqlexpr_sqlite, provided for convenience *)
+(**/**)
 module Types : sig
   (** Type used internally. *)
-  type st
+  type st = Sqlite3.Data.t list * int * string * string option
 end
 
 type st = Types.st
+(**/**)
 
 (** All the exceptions raised by the code in {Sqlexpr_sqlite} are wrapped in
     Error except when indicated otherwise. *)
@@ -190,3 +191,34 @@ module Make_gen :
   functor (M : Sqlexpr_concurrency.THREAD) ->
     functor(P : POOL with type 'a result = 'a M.t) ->
       S with type 'a result = 'a M.t
+
+(**/**)
+val raise_thread_error : unit -> 'a
+val curr_thread_id : unit -> int
+val prettify_sql_stmt : string -> string
+val string_of_param : Sqlite3.Data.t -> string
+val string_of_params : Sqlite3.Data.t list -> string
+
+module Stmt :
+sig
+  type t
+  val prepare : Sqlite3.db -> string -> t
+  val db_handle : t -> Sqlite3.db
+  val finalize : t -> unit
+  val reset : t -> Sqlite3.Rc.t
+  val step : t -> Sqlite3.Rc.t
+  val bind : t -> int -> Sqlite3.Data.t -> Sqlite3.Rc.t
+  val row_data : t -> Sqlite3.Data.t array
+  val data_count : t -> int
+end
+
+module Stmt_cache :
+sig
+  type t
+  val create : unit -> t
+  val flush_stmts : t -> unit
+  val find_remove_stmt : t -> string -> Stmt.t option
+  val add_stmt : t -> string -> Stmt.t -> unit
+end
+
+(**/**)

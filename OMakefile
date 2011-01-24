@@ -25,7 +25,7 @@ section
 .SCANNER: scan-ocaml-%.mli: %.mli pa_sql.cmo
 OCAMLFINDFLAGS += -syntax camlp4o -ppopt pa_sql.cmo
 
-OCamlLibrary(sqlexpr, sqlexpr_concurrency sqlexpr_sqlite)
+OCamlLibrary(sqlexpr, sqlexpr_concurrency sqlexpr_sqlite sqlexpr_sqlite_lwt)
 
 section
     OCAMLPACKS[] += oUnit
