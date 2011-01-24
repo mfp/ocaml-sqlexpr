@@ -17,8 +17,12 @@ exception Error of exn
     [try ... with Sqlexpr.Error (Sqlexpr.sqlite_error _)] *)
 exception Sqlite_error of string * Sqlite3.Rc.t
 
-module Make(M : Sqlexpr_concurrency.THREAD) :
+(**  *)
+module type S =
 sig
+  (** Concurrency monad value. *)
+  type 'a result
+
   (** Type of SQL statements (no output parameters). *)
   type ('a, 'b) statement =
       {
@@ -53,61 +57,58 @@ sig
   (** Close the DB and finalize all the associated prepared statements. *)
   val close_db : db -> unit
 
-  (** Return the [Sqlite3.db] handle from a [db]. *)
-  val sqlite_db : db -> Sqlite3.db
-
   (** Execute a SQL statement. *)
-  val execute : db -> ('a, unit M.t) statement -> 'a
+  val execute : db -> ('a, unit result) statement -> 'a
 
   (** Execute an INSERT SQL statement and return the last inserted row id.
       Example:
       [insert db sqlc"INSERT INTO users(name, pass) VALUES(%s, %s)" name pass]
       *)
-  val insert : db -> ('a, int64 M.t) statement -> 'a
+  val insert : db -> ('a, int64 result) statement -> 'a
 
   (** "Select" a SELECT SQL expression and return a list of tuples; e.g.
        [select db sqlc"SELECT \@s\{name\}, \@s\{pass\} FROM users"]
        [select db sqlc"SELECT \@s\{pass\} FROM users WHERE id = %L" user_id]
       *)
-  val select : db -> ('c, 'a, 'a list M.t) expression -> 'c
+  val select : db -> ('c, 'a, 'a list result) expression -> 'c
 
   (** [select_f db f expr ...] is similar to [select db expr ...] but maps the
       results using the provided [f] function. *)
-  val select_f : db -> ('a -> 'b M.t) -> ('c, 'a, 'b list M.t) expression -> 'c
+  val select_f : db -> ('a -> 'b result) -> ('c, 'a, 'b list result) expression -> 'c
 
   (** [select_one db expr ...] takes the first result from
       [select db expr ...].
       @raise Not_found if no row is found. *)
-  val select_one : db -> ('c, 'a, 'a M.t) expression -> 'c
+  val select_one : db -> ('c, 'a, 'a result) expression -> 'c
 
   (** [select_one_maybe db expr ...] takes the first result from
       [select db expr ...].
       @return None if no row is found. *)
-  val select_one_maybe : db -> ('c, 'a, 'a option M.t) expression -> 'c
+  val select_one_maybe : db -> ('c, 'a, 'a option result) expression -> 'c
 
   (** [select_one_f db f expr ...] is returns the first result from
       [select_f db f expr ...].
       @raise Not_found if no row is found. *)
-  val select_one_f : db -> ('a -> 'b M.t) -> ('c, 'a, 'b M.t) expression -> 'c
+  val select_one_f : db -> ('a -> 'b result) -> ('c, 'a, 'b result) expression -> 'c
 
   (** [select_one_f_maybe db expr ...] takes the first result from
       [select_f db f expr ...].
       @return None if no row is found. *)
-  val select_one_f_maybe : db -> ('a -> 'b M.t) ->
-    ('c, 'a, 'b option M.t) expression -> 'c
+  val select_one_f_maybe : db -> ('a -> 'b result) ->
+    ('c, 'a, 'b option result) expression -> 'c
 
   (** Run the provided function in a DB transaction. A rollback is performed
       if an exception is raised inside the transaction. *)
-  val transaction : db -> (db -> 'a M.t) -> 'a M.t
+  val transaction : db -> (db -> 'a result) -> 'a result
 
   (** [fold db f a expr ...] is
       [f (... (f (f a r1) r2) ...) rN]
       where [rN] is the n-th row returned for the SELECT expression [expr]. *)
   val fold :
-    db -> ('a -> 'b -> 'a M.t) -> 'a -> ('c, 'b, 'a M.t) expression -> 'c
+    db -> ('a -> 'b -> 'a result) -> 'a -> ('c, 'b, 'a result) expression -> 'c
 
   (** Iterate through the rows returned for the supplied expression. *)
-  val iter : db -> ('a -> unit M.t) -> ('b, 'a, unit M.t) expression -> 'b
+  val iter : db -> ('a -> unit result) -> ('b, 'a, unit result) expression -> 'b
 
   (** Module used by the code generated for SQL literals. *)
   module Directives :
@@ -155,3 +156,37 @@ sig
   end
 end
 
+module Make : functor (M : Sqlexpr_concurrency.THREAD) ->
+sig
+  include S with type 'a result = 'a M.t
+
+  (** Return the [Sqlite3.db] handle from a [db]. *)
+  val sqlite_db : db -> Sqlite3.db
+end
+
+module type POOL =
+sig
+  type 'a result
+  type db
+  type stmt
+  val open_db : string -> db
+  val close_db : db -> unit
+  val prepare :
+    db -> (stmt -> string -> Sqlite3.Data.t list -> 'a result) -> st -> 'a result
+  val step :
+    ?sql:string -> ?params:Sqlite3.Data.t list -> stmt -> Sqlite3.Rc.t result
+  val step_with_last_insert_rowid :
+    ?sql:string -> ?params:Sqlite3.Data.t list -> stmt -> Int64.t result
+  val data_count : stmt -> int result
+  val reset : stmt -> unit result
+  val row_data : stmt -> Sqlite3.Data.t array result
+  val raise_error :
+    db -> ?sql:string -> ?params:Sqlite3.Data.t list -> ?errmsg:string ->
+    Sqlite3.Rc.t -> 'a result
+  val unsafe_execute : db -> string -> unit result
+end
+
+module Make_gen :
+  functor (M : Sqlexpr_concurrency.THREAD) ->
+    functor(P : POOL with type 'a result = 'a M.t) ->
+      S with type 'a result = 'a M.t

@@ -450,6 +450,88 @@ struct
     raise_error (handle db) ?sql ?params ?errmsg errcode
 end
 
+module type S =
+sig
+  type 'a result
+
+  type ('a, 'b) statement =
+      {
+        sql_statement : string;
+        stmt_id : string option;
+        directive : (st -> 'b) -> st -> 'a;
+      }
+
+  type ('a, 'b, 'c) expression =
+      {
+        statement : ('a, 'c) statement;
+        get_data : int * (Sqlite3.Data.t array -> 'b);
+      }
+
+  type db
+
+  exception Error of exn
+  exception Sqlite_error of string * Sqlite3.Rc.t
+
+  val open_db : string -> db
+  val close_db : db -> unit
+  val execute : db -> ('a, unit result) statement -> 'a
+  val insert : db -> ('a, int64 result) statement -> 'a
+  val select : db -> ('c, 'a, 'a list result) expression -> 'c
+  val select_f : db -> ('a -> 'b result) -> ('c, 'a, 'b list result) expression -> 'c
+  val select_one : db -> ('c, 'a, 'a result) expression -> 'c
+  val select_one_maybe : db -> ('c, 'a, 'a option result) expression -> 'c
+  val select_one_f : db -> ('a -> 'b result) -> ('c, 'a, 'b result) expression -> 'c
+  val select_one_f_maybe : db -> ('a -> 'b result) ->
+    ('c, 'a, 'b option result) expression -> 'c
+  val transaction : db -> (db -> 'a result) -> 'a result
+  val fold :
+    db -> ('a -> 'b -> 'a result) -> 'a -> ('c, 'b, 'a result) expression -> 'c
+  val iter : db -> ('a -> unit result) -> ('b, 'a, unit result) expression -> 'b
+
+  module Directives :
+  sig
+    type ('a, 'b) directive = (st -> 'b) -> st -> 'a
+
+    val literal : string -> ('a, 'a) directive
+    val int : (int -> 'a, 'a) directive
+    val text : (string -> 'a, 'a) directive
+    val blob : (string -> 'a, 'a) directive
+    val float : (float -> 'a, 'a) directive
+    val int32 : (int32 -> 'a, 'a) directive
+    val int64 : (int64 -> 'a, 'a) directive
+    val bool : (bool -> 'a, 'a) directive
+    val any : (('b -> string) -> 'b -> 'a, 'a) directive
+
+    val maybe_int : (int option -> 'a, 'a) directive
+    val maybe_text : (string option -> 'a, 'a) directive
+    val maybe_blob : (string option -> 'a, 'a) directive
+    val maybe_float : (float option -> 'a, 'a) directive
+    val maybe_int32 : (int32 option -> 'a, 'a) directive
+    val maybe_int64 : (int64 option -> 'a, 'a) directive
+    val maybe_bool : (bool option -> 'a, 'a) directive
+    val maybe_any : (('b -> string) -> 'b option -> 'a, 'a) directive
+  end
+
+  module Conversion :
+  sig
+    val text : Sqlite3.Data.t -> string
+    val blob : Sqlite3.Data.t -> string
+    val int : Sqlite3.Data.t -> int
+    val int32 : Sqlite3.Data.t -> int32
+    val int64 : Sqlite3.Data.t -> int64
+    val float : Sqlite3.Data.t -> float
+    val bool : Sqlite3.Data.t -> bool
+    val maybe : (Sqlite3.Data.t -> 'a) -> Sqlite3.Data.t -> 'a option
+    val maybe_text : Sqlite3.Data.t -> string option
+    val maybe_blob : Sqlite3.Data.t -> string option
+    val maybe_int : Sqlite3.Data.t -> int option
+    val maybe_int32 : Sqlite3.Data.t -> int32 option
+    val maybe_int64 : Sqlite3.Data.t -> int64 option
+    val maybe_float : Sqlite3.Data.t -> float option
+    val maybe_bool : Sqlite3.Data.t -> bool option
+  end
+end
+
 module Make_gen(M : THREAD)(POOL : POOL with type 'a result = 'a M.t) =
 struct
   module Lwt = M
@@ -462,6 +544,7 @@ struct
   open Directives
 
   let (>>=) = bind
+  type 'a result = 'a M.t
 
   type ('a, 'b) statement = ('a, 'b) Directives.statement =
       {
