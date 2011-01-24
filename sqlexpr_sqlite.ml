@@ -304,7 +304,7 @@ sig
   val reset : stmt -> unit result
   val row_data : stmt -> Sqlite3.Data.t array result
   val raise_error :
-    db -> ?sql:string -> ?params:Sqlite3.Data.t list -> ?errmsg:string ->
+    stmt -> ?sql:string -> ?params:Sqlite3.Data.t list -> ?errmsg:string ->
     Sqlite3.Rc.t -> 'a result
   val unsafe_execute : db -> string -> unit result
 end
@@ -446,8 +446,8 @@ struct
   let unsafe_execute db sql =
     check_ok ~sql (handle db) (Sqlite3.exec (handle db)) sql
 
-  let raise_error db ?sql ?params ?errmsg errcode =
-    raise_error (handle db) ?sql ?params ?errmsg errcode
+  let raise_error stmt ?sql ?params ?errmsg errcode =
+    raise_error (Stmt.db_handle stmt) ?sql ?params ?errmsg errcode
 end
 
 module type S =
@@ -608,7 +608,7 @@ struct
                  lwt x = try_lwt f (snd expr.get_data data) in
                    loop (x :: l)
              | Sqlite3.Rc.DONE -> return (List.rev l)
-             | rc -> POOL.raise_error ~sql ~params db rc
+             | rc -> POOL.raise_error ~sql ~params stmt rc
          in ensure_reset_stmt stmt loop [])
       db
       expr.statement
@@ -624,7 +624,7 @@ struct
                  lwt data = POOL.row_data stmt in
                  try_lwt f (snd expr.get_data data)
              | Sqlite3.Rc.DONE -> not_found ()
-             | rc -> POOL.raise_error ~sql ~params db rc
+             | rc -> POOL.raise_error ~sql ~params stmt rc
          end ())
       db
       expr.statement
@@ -684,7 +684,7 @@ struct
                      f acc (snd expr.get_data data)
                  end >>= loop
              | Sqlite3.Rc.DONE -> return acc
-             | rc -> POOL.raise_error ~sql ~params db rc
+             | rc -> POOL.raise_error ~sql ~params stmt rc
          in ensure_reset_stmt stmt loop init)
       db
       expr.statement
@@ -703,7 +703,7 @@ struct
                      f (snd expr.get_data data)
                  end >>= loop
              | Sqlite3.Rc.DONE -> return ()
-             | rc -> POOL.raise_error db ~sql ~params rc
+             | rc -> POOL.raise_error stmt ~sql ~params rc
          in ensure_reset_stmt stmt loop ())
       db
       expr.statement

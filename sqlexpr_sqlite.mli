@@ -181,7 +181,7 @@ sig
   val reset : stmt -> unit result
   val row_data : stmt -> Sqlite3.Data.t array result
   val raise_error :
-    db -> ?sql:string -> ?params:Sqlite3.Data.t list -> ?errmsg:string ->
+    stmt -> ?sql:string -> ?params:Sqlite3.Data.t list -> ?errmsg:string ->
     Sqlite3.Rc.t -> 'a result
   val unsafe_execute : db -> string -> unit result
 end
