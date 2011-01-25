@@ -13,6 +13,7 @@ struct
                         end)
 
   type db = {
+    id : int;
     file : string;
     mutable max_threads : int;
     workers : worker Queue.t;
@@ -27,6 +28,7 @@ struct
     stmt_cache : Stmt_cache.t;
     task_channel : (int * (Sqlite3.db -> unit)) Event.channel;
     mutable thread : Thread.t;
+    mutable finished : bool;
     db : db; (* keep ref to db so it isn't GCed while a worker is active *)
   }
 
@@ -42,14 +44,21 @@ struct
       Lwt_sequence.iter_l (fun u -> wakeup_exn u e) db.waiters;
       Queue.iter
         (fun worker ->
-           let id = Lwt_unix.make_notification ~once:true (fun () -> ()) in
-             Event.sync (Event.send worker.task_channel (id, (fun _ -> ()))))
+           if not worker.finished then begin
+             let id = Lwt_unix.make_notification ~once:true (fun () -> ()) in
+               Event.sync (Event.send worker.task_channel (id, (fun _ -> ())));
+           end)
         db.workers
 
+  let new_id =
+    let n = ref 0 in
+      fun () -> incr n; !n
+
   let open_db file =
+    let id = new_id () in
     let r =
       {
-        file;
+        id; file;
         max_threads = !max_threads;
         waiters = Lwt_sequence.create ();
         workers = Queue.create ();
@@ -59,6 +68,7 @@ struct
        r
 
   let close_worker w =
+    w.finished <- true;
     try
       WT.iter (fun stmt -> Stmt.finalize stmt) w.stmts;
       Stmt_cache.flush_stmts w.stmt_cache;
@@ -72,8 +82,12 @@ struct
         task worker.handle;
         if worker.db.thread_count > worker.db.max_threads then break := true;
         Lwt_unix.send_notification id;
-        if not !break then do_worker_loop ()
-        else close_worker worker
+        if not !break then
+          do_worker_loop ()
+        else begin
+          worker.finished <- true;
+          close_worker worker
+        end
     in
       worker.handle <- Sqlite3.db_open worker.db.file;
       do_worker_loop ()
@@ -88,6 +102,7 @@ struct
         stmt_cache = Stmt_cache.create ();
         task_channel = Event.new_channel ();
         thread = Thread.self ();
+        finished = false;
       }
     in worker.thread <- Thread.create (worker_loop worker) ();
        worker
@@ -131,6 +146,8 @@ struct
                  wakeup_exn wakener exn)
     in
     try_lwt
+      if worker.finished then
+        failwith (sprintf "worker %d is finished!" (Thread.id worker.thread));
       (* Send the id and the task to the worker: *)
       Event.sync (Event.send worker.task_channel (id, task));
       waiter
@@ -170,6 +187,9 @@ struct
 
   let prepare db f (params, nparams, sql, stmt_id) =
     lwt worker = get_worker db in
+    if worker.finished then
+      failwithfmt "worker %d (db %d) is finished!" (Thread.id worker.thread) db.id
+    else
     lwt stmt =
       try_lwt
         match stmt_id with
