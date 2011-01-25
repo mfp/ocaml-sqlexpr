@@ -358,8 +358,8 @@ struct
 
   let handle db =
     if db.thread_id <> curr_thread_id () then
-      raise_thread_error ~msg:"in IdentityPool.handle" db.thread_id;
-    db.handle
+      try_lwt (raise_thread_error ~msg:"in IdentityPool.handle" db.thread_id)
+    else return db.handle
 
   let close_db db =
     try
@@ -367,7 +367,12 @@ struct
         (fun stmt -> Stmt.finalize stmt)
         db.stmts;
       Stmt_cache.flush_stmts db.stmt_cache;
-      ignore (Sqlite3.db_close (handle db))
+      ignore begin try_lwt
+        lwt db = handle db in
+          ignore (Sqlite3.db_close db);
+          return ()
+      with e -> (* FIXME: log? *) return ()
+      end
     with Sqlite3.Error _ -> () (* FIXME: raise? *)
 
   let open_db ?(init = fun _ -> ()) fname =
@@ -403,20 +408,21 @@ struct
     lwt _ = run ?stmt ?sql ?params db f x in return ()
 
   let prepare db f (params, nparams, sql, stmt_id) =
+    lwt dbh = handle db in
     lwt stmt =
       try_lwt
         match stmt_id with
             None ->
               profile_prepare_stmt sql
                 (fun () ->
-                   let stmt = Stmt.prepare (handle db) sql in
+                   let stmt = Stmt.prepare dbh sql in
                      WT.add db.stmts stmt;
                      return stmt)
           | Some id ->
               match Stmt_cache.find_remove_stmt db.stmt_cache id with
                 Some stmt ->
                   begin try_lwt
-                    check_ok ~stmt (handle db) Stmt.reset stmt
+                    check_ok ~stmt dbh Stmt.reset stmt
                   with e ->
                     (* drop the stmt *)
                     Stmt.finalize stmt;
@@ -426,7 +432,7 @@ struct
               | None ->
                   profile_prepare_stmt sql
                     (fun () ->
-                       let stmt = Stmt.prepare (handle db) sql in
+                       let stmt = Stmt.prepare dbh sql in
                          WT.add db.stmts stmt;
                          return stmt)
       with e ->
@@ -437,7 +443,7 @@ struct
     in
       (* the list of params is reversed *)
       iteri
-        (fun n v -> check_ok ~sql ~stmt (handle db) (Stmt.bind stmt (nparams - n)) v)
+        (fun n v -> check_ok ~sql ~stmt dbh (Stmt.bind stmt (nparams - n)) v)
         params >>
       profile_execute_sql sql ~params
         (fun () ->
@@ -460,7 +466,8 @@ struct
   let row_data stmt = return (Stmt.row_data stmt)
 
   let unsafe_execute db sql =
-    check_ok ~sql (handle db) (Sqlite3.exec (handle db)) sql
+    lwt dbh = handle db in
+      check_ok ~sql dbh (Sqlite3.exec dbh) sql
 
   let raise_error stmt ?sql ?params ?errmsg errcode =
     raise_error (Stmt.db_handle stmt) ?sql ?params ?errmsg errcode
