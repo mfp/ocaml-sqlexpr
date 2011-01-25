@@ -594,7 +594,8 @@ struct
       else
         failwithfmt
           "Sqlexpr_sqlite.%s: wrong number of columns \
-           (expected %d, got %d)" s expected actual
+           (expected %d, got %d) in SQL: %s" s expected actual
+          expr.statement.sql_statement
 
   let ensure_reset_stmt stmt f x =
     try_lwt
