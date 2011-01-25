@@ -19,6 +19,7 @@ struct
     workers : worker Queue.t;
     waiters : worker Lwt.u Lwt_sequence.t;
     mutable thread_count : int;
+    mutable db_finished : bool;
   }
 
   and worker =
@@ -35,11 +36,12 @@ struct
   type stmt = worker * Stmt.t
   type 'a result = 'a Lwt.t
 
-  let max_threads = ref 4
+  let max_threads = ref 100
   let set_default_max_threads n = max_threads := n
 
   let close_db db =
     db.max_threads <- 0;
+    db.db_finished <- true;
     let e = Error (Failure (sprintf "Handle closed for DB %S" db.file)) in
       Lwt_sequence.iter_l (fun u -> wakeup_exn u e) db.waiters;
       Queue.iter
@@ -63,6 +65,7 @@ struct
         waiters = Lwt_sequence.create ();
         workers = Queue.create ();
         thread_count = 0;
+        db_finished = false;
       }
     in Gc.finalise close_db r;
        r
@@ -129,7 +132,10 @@ struct
   let check_worker_finished worker =
     if worker.finished then
       failwith (sprintf "worker %d (db %d:%S) is finished!"
-                  (Thread.id worker.thread) worker.db.id worker.db.file)
+                  (Thread.id worker.thread) worker.db.id worker.db.file);
+    if worker.db.db_finished then
+      failwith (sprintf "(db %d:%S) for worker %d is finished!"
+                  worker.db.id worker.db.file (Thread.id worker.thread))
 
   let detach worker f args =
     let result = ref `Nothing in
