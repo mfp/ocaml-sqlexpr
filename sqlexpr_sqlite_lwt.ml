@@ -161,19 +161,22 @@ struct
       Event.sync (Event.send worker.task_channel (id, task));
       waiter
 
-  let raise_error worker ?sql ?params ?errmsg errcode =
-    lwt errmsg = match errmsg with
-        Some e -> return e
-      | None -> detach worker (fun dbh () -> Sqlite3.errmsg dbh) () in
-    let msg = Sqlite3.Rc.to_string errcode ^ " " ^ errmsg in
+  let do_raise_error ?sql ?params ?errmsg errcode =
+    let msg = Sqlite3.Rc.to_string errcode ^ Option.map_default ((^) " ") "" errmsg in
     let msg = match sql with
         None -> msg
       | Some sql -> sprintf "%s in %s" msg (prettify_sql_stmt sql) in
     let msg = match params with
         None | Some [] -> msg
       | Some params ->
-          sprintf "%s with params %s" msg (string_of_params (List.rev params)) in
-      raise_lwt (Error (Sqlite_error (msg, errcode)))
+          sprintf "%s with params %s" msg (string_of_params (List.rev params))
+    in raise (Error (Sqlite_error (msg, errcode)))
+
+  let raise_error worker ?sql ?params ?errmsg errcode =
+    lwt errmsg = match errmsg with
+        Some e -> return e
+      | None -> detach worker (fun dbh () -> Sqlite3.errmsg dbh) ()
+    in try_lwt return (do_raise_error ?sql ?params ~errmsg errcode)
 
   let rec run ?stmt ?sql ?params worker f x = detach worker f x >>= function
       Sqlite3.Rc.OK | Sqlite3.Rc.ROW | Sqlite3.Rc.DONE as r -> return r
