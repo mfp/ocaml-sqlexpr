@@ -96,9 +96,9 @@ struct
     with_db
       (fun db () ->
          let n = ref 1 in
-           insert db l;
+           insert db l >>
            let l = List.map (fun x -> let i = !n in incr n; (i, Some x)) l in
-             lwt l' = S.select db expr in
+           lwt l' = S.select db expr in
            let l' = List.sort compare l' in
              aeq_list
                ~printer:(fun (id, x) -> match x with
