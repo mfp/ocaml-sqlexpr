@@ -61,6 +61,13 @@ sig
   (** Close the DB and finalize all the associated prepared statements. *)
   val close_db : db -> unit
 
+  (** [with_single_worker db f] evaluates [f db'] where [db'] borrows a 'worker'
+    * from [db] and is only valid inside [f]. Use this e.g. if you have an
+    * in-mem database and a number of operations that must go against the same
+    * instance (since data is not shared across different [:memory:]
+    * databases). *)
+  val with_single_worker : db -> (db -> 'a result) -> 'a result
+
   (** Execute a SQL statement. *)
   val execute : db -> ('a, unit result) statement -> 'a
 
@@ -187,6 +194,7 @@ sig
     stmt -> ?sql:string -> ?params:Sqlite3.Data.t list -> ?errmsg:string ->
     Sqlite3.Rc.t -> 'a result
   val unsafe_execute : db -> string -> unit result
+  val with_single_worker : db -> (db -> 'a result) -> 'a result
 end
 
 module Make_gen :

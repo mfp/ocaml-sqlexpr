@@ -323,6 +323,7 @@ sig
     stmt -> ?sql:string -> ?params:Sqlite3.Data.t list -> ?errmsg:string ->
     Sqlite3.Rc.t -> 'a result
   val unsafe_execute : db -> string -> unit result
+  val with_single_worker : db -> (db -> 'a result) -> 'a result
 end
 
 module IdentityPool(M: THREAD) : sig
@@ -454,6 +455,8 @@ struct
                  Some id -> Stmt_cache.add_stmt db.stmt_cache id stmt; return ()
                | None -> return ())
 
+  let with_single_worker db f = f db
+
   let step ?sql ?params stmt =
     run ?sql ?params ~stmt (Stmt.db_handle stmt) Stmt.step stmt
 
@@ -497,6 +500,7 @@ sig
 
   val open_db : ?init:(Sqlite3.db -> unit) -> string -> db
   val close_db : db -> unit
+  val with_single_worker : db -> (db -> 'a result) -> 'a result
   val execute : db -> ('a, unit result) statement -> 'a
   val insert : db -> ('a, int64 result) statement -> 'a
   val select : db -> ('c, 'a, 'a list result) expression -> 'c
@@ -589,6 +593,8 @@ struct
 
   let open_db = POOL.open_db
   let close_db = POOL.close_db
+
+  let with_single_worker = POOL.with_single_worker
 
   let do_select f db p =
     p.directive (POOL.prepare db f) ([], 0, p.sql_statement, p.stmt_id)

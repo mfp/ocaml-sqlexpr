@@ -264,6 +264,26 @@ struct
                  Some id -> Stmt_cache.add_stmt worker.stmt_cache id stmt; return ()
                | None -> return ())
 
+  let with_single_worker db f =
+    let db' = open_db ~init:db.init_func db.file in
+    lwt worker = get_worker db in
+    let worker_id w = Thread.id w.thread in
+      add_worker db' worker;
+      try_lwt
+        f db
+      finally
+        (* remove [worker] from db'.workers queue, transfer it to the original
+         * db and close db'  *)
+        let workers =
+          List.filter
+            (fun w -> worker_id w <> worker_id worker)
+            (Queue.fold (fun l x -> x :: l) [] db'.workers)
+        in Queue.clear db'.workers;
+           List.iter (fun w -> Queue.add w db'.workers) workers;
+           add_worker db worker;
+           close_db db';
+           return ()
+
   let step ?sql ?params (worker, stmt) =
     run ?sql ?params ~stmt worker (fun _ -> Stmt.step) stmt
 
