@@ -28,12 +28,17 @@ struct
     assert_equal
       ~printer:(fun l -> "[ " ^ String.concat "; " (List.map printer l) ^ " ]")
 
-  let with_db f x =
-    let db = S.open_db ":memory:" in
+  (* schema changes to :memory: db made by a Sqlexpr_sqlite_lwt worker are not
+   * seen by the others, so allow to use a file by doing ~in_mem:false *)
+  let with_db ?(in_mem = true) f x =
+    let file =
+      if in_mem then ":memory:" else Filename.temp_file "t_sqlexpr_sqlite_" "" in
+    let db = S.open_db file in
       try_lwt
         f db x
       finally
         S.close_db db;
+        if not in_mem then Sys.remove file;
         return ()
 
   let test_execute () =
@@ -208,7 +213,10 @@ struct
     end ()
 
   let test_nested_iter_and_fold () =
-    with_db begin fun db () ->
+    (* nested iter/folds will spawn multiple Sqlexpr_sqlite_lwt workers, so
+     * cannot use in-mem DB, lest the table not be created in other workers
+     * than the one where it was created *)
+    with_db ~in_mem:false begin fun db () ->
       S.execute db sql"CREATE TABLE foo(n INTEGER NOT NULL)" >>
       iter (S.execute db sqlc"INSERT INTO foo(n) VALUES(%d)") [1; 2; 3] >>
       let q = Queue.create () in
