@@ -587,9 +587,9 @@ struct
          POOL.step_with_last_insert_rowid ~sql ~params stmt)
       db p
 
-  let check_num_cols s stmt expr =
+  let check_num_cols s stmt expr data =
     let expected = fst expr.get_data in
-    lwt actual = POOL.data_count stmt in
+    let actual = Array.length data in
       if expected = actual then return ()
       else
         failwithfmt
@@ -610,8 +610,8 @@ struct
            auto_yield () >>
            POOL.step stmt >>= function
                Sqlite3.Rc.ROW ->
-                 check_num_cols "select" stmt expr >>
                  lwt data = POOL.row_data stmt in
+                 check_num_cols "select" stmt expr data >>
                  lwt x = try_lwt f (snd expr.get_data data) in
                    loop (x :: l)
              | Sqlite3.Rc.DONE -> return (List.rev l)
@@ -686,9 +686,9 @@ struct
            POOL.step stmt >>= function
                Sqlite3.Rc.ROW ->
                  begin try_lwt
-                   check_num_cols "fold" stmt expr >>
                    lwt data = POOL.row_data stmt in
-                     f acc (snd expr.get_data data)
+                   check_num_cols "fold" stmt expr data >>
+                   f acc (snd expr.get_data data)
                  end >>= loop
              | Sqlite3.Rc.DONE -> return acc
              | rc -> POOL.raise_error ~sql ~params stmt rc
@@ -705,9 +705,9 @@ struct
            POOL.step stmt >>= function
                Sqlite3.Rc.ROW ->
                  begin try_lwt
-                   check_num_cols "iter" stmt expr >>
                    lwt data = POOL.row_data stmt in
-                     f (snd expr.get_data data)
+                   check_num_cols "iter" stmt expr data >>
+                   f (snd expr.get_data data)
                  end >>= loop
              | Sqlite3.Rc.DONE -> return ()
              | rc -> POOL.raise_error stmt ~sql ~params rc
