@@ -4,8 +4,17 @@ open Lwt
 
 let failwithfmt fmt = ksprintf (fun s -> try_lwt failwith s) fmt
 
+module CONC =
+struct
+  include Lwt
+  let auto_yield = Lwt_unix.auto_yield
+  let sleep = Lwt_unix.sleep
+end
+
 module POOL =
 struct
+  include Sqlexpr_sqlite.Profile(CONC)
+
   module WT = Weak.Make(struct
                           type t = Stmt.t
                           let hash = Hashtbl.hash
@@ -206,9 +215,11 @@ struct
       try_lwt
         match stmt_id with
             None ->
-              lwt stmt = detach worker Stmt.prepare sql in
-                WT.add worker.stmts stmt;
-                return stmt
+              profile_prepare_stmt sql
+                (fun () ->
+                   lwt stmt = detach worker Stmt.prepare sql in
+                     WT.add worker.stmts stmt;
+                     return stmt)
           | Some id ->
               match Stmt_cache.find_remove_stmt worker.stmt_cache id with
                 Some stmt ->
@@ -221,9 +232,11 @@ struct
                   end >>
                   return stmt
               | None ->
-                  lwt stmt = detach worker Stmt.prepare sql in
-                    WT.add worker.stmts stmt;
-                    return stmt
+                  profile_prepare_stmt sql
+                    (fun () ->
+                       lwt stmt = detach worker Stmt.prepare sql in
+                         WT.add worker.stmts stmt;
+                         return stmt)
       with e ->
         add_worker db worker;
         failwithfmt "Error with SQL statement %S:\n%s" sql (Printexc.to_string e)
@@ -238,13 +251,15 @@ struct
                   | code -> do_raise_error ~sql ~params code)
                params)
         stmt >>
-      try_lwt
-        f (worker, stmt) sql params
-      finally
-        add_worker db worker;
-        match stmt_id with
-            Some id -> Stmt_cache.add_stmt worker.stmt_cache id stmt; return ()
-          | None -> return ()
+      profile_execute_sql sql ~params
+        (fun () ->
+           try_lwt
+             f (worker, stmt) sql params
+           finally
+             add_worker db worker;
+             match stmt_id with
+                 Some id -> Stmt_cache.add_stmt worker.stmt_cache id stmt; return ()
+               | None -> return ())
 
   let step ?sql ?params (worker, stmt) =
     run ?sql ?params ~stmt worker (fun _ -> Stmt.step) stmt
@@ -270,13 +285,6 @@ struct
 
   let raise_error (worker, _) ?sql ?params ?errmsg errcode =
     raise_error worker ?sql ?params ?errmsg errcode
-end
-
-module CONC =
-struct
-  include Lwt
-  let auto_yield = Lwt_unix.auto_yield
-  let sleep = Lwt_unix.sleep
 end
 
 include Sqlexpr_sqlite.Make_gen(CONC)(POOL)
