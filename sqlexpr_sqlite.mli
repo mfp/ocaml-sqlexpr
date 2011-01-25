@@ -52,8 +52,11 @@ sig
   exception Sqlite_error of string * Sqlite3.Rc.t
 
 
-  (** Open the DB whose filename is given. [":memory:"] refers to an in-mem DB. *)
-  val open_db : string -> db
+  (** Open the DB whose filename is given. [":memory:"] refers to an in-mem DB.
+    * @param [init] function to be applied to [Sqlite3.db] handle(s) before
+    * they are used (can be used to register functions or initialize schema in
+    * in-mem tables. *)
+  val open_db : ?init:(Sqlite3.db -> unit) -> string -> db
 
   (** Close the DB and finalize all the associated prepared statements. *)
   val close_db : db -> unit
@@ -170,7 +173,7 @@ sig
   type 'a result
   type db
   type stmt
-  val open_db : string -> db
+  val open_db : ?init:(Sqlite3.db -> unit) -> string -> db
   val close_db : db -> unit
   val prepare :
     db -> (stmt -> string -> Sqlite3.Data.t list -> 'a result) -> st -> 'a result

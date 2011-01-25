@@ -29,6 +29,7 @@ struct
     waiters : worker Lwt.u Lwt_sequence.t;
     mutable thread_count : int;
     mutable db_finished : bool;
+    init_func : Sqlite3.db -> unit;
   }
 
   and worker =
@@ -67,7 +68,7 @@ struct
     let n = ref 0 in
       fun () -> incr n; !n
 
-  let open_db file =
+  let open_db ?(init = fun _ -> ()) file =
     let id = new_id () in
     let r =
       {
@@ -76,6 +77,7 @@ struct
         waiters = Lwt_sequence.create ();
         workers = Queue.create ();
         thread_count = 0;
+        init_func = init;
         db_finished = false;
       }
     in Gc.finalise close_db r;
@@ -104,6 +106,7 @@ struct
         end
     in
       worker.handle <- Sqlite3.db_open worker.db.file;
+      worker.db.init_func worker.handle;
       do_worker_loop ()
 
   let make_worker db =

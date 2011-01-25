@@ -309,7 +309,7 @@ sig
   type 'a result
   type db
   type stmt
-  val open_db : string -> db
+  val open_db : ?init:(Sqlite3.db -> unit) -> string -> db
   val close_db : db -> unit
   val prepare :
     db -> (stmt -> string -> Sqlite3.Data.t list -> 'a result) -> st -> 'a result
@@ -370,12 +370,14 @@ struct
       ignore (Sqlite3.db_close (handle db))
     with Sqlite3.Error _ -> () (* FIXME: raise? *)
 
-  let open_db fname =
-    {
-      handle = Sqlite3.db_open fname; id = new_id (); stmts = WT.create 13;
-      thread_id = Thread.id (Thread.self ());
-      stmt_cache = Stmt_cache.create ();
-    }
+  let open_db ?(init = fun _ -> ()) fname =
+    let handle = Sqlite3.db_open fname in
+      init handle;
+      {
+        handle = handle; id = new_id (); stmts = WT.create 13;
+        thread_id = Thread.id (Thread.self ());
+        stmt_cache = Stmt_cache.create ();
+      }
 
   let raise_error db ?sql ?params ?(errmsg = Sqlite3.errmsg db) errcode =
     let msg = Sqlite3.Rc.to_string errcode ^ " " ^ errmsg in
@@ -486,7 +488,7 @@ sig
   exception Error of exn
   exception Sqlite_error of string * Sqlite3.Rc.t
 
-  val open_db : string -> db
+  val open_db : ?init:(Sqlite3.db -> unit) -> string -> db
   val close_db : db -> unit
   val execute : db -> ('a, unit result) statement -> 'a
   val insert : db -> ('a, int64 result) statement -> 'a
