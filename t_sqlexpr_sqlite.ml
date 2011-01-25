@@ -263,7 +263,7 @@ struct
   include Lwt
   let auto_yield = Lwt_unix.auto_yield
   let sleep = Lwt_unix.sleep
-  let run = Lwt_unix.run
+  let run x = Lwt_unix.run (Lwt.pick [x; Lwt_unix.timeout 1.0])
   let iter = Lwt_list.iter_s
 end
 
