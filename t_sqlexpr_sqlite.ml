@@ -265,6 +265,8 @@ let all_tests =
       "Sqlexpr_sqlite.Make(Sqlexpr_concurrency.Id)" >::: M.all_tests);
     (let module M = Test(LwtConc)(Sqlexpr_sqlite.Make(LwtConc)) in
       "Sqlexpr_sqlite.Make(LwtConcurrency)" >::: M.all_tests);
+    (let module M = Test(LwtConc)(Sqlexpr_sqlite_lwt) in
+      "Sqlexpr_sqlite_lwt" >::: M.all_tests);
   ]
 
 let _ =
