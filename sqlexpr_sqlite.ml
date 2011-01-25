@@ -363,14 +363,11 @@ struct
     with Sqlite3.Error _ -> () (* FIXME: raise? *)
 
   let open_db fname =
-    let r =
-      {
-        handle = Sqlite3.db_open fname; id = new_id (); stmts = WT.create 13;
-        thread_id = Thread.id (Thread.self ());
-        stmt_cache = Stmt_cache.create ();
-      }
-    in Gc.finalise close_db r;
-       r
+    {
+      handle = Sqlite3.db_open fname; id = new_id (); stmts = WT.create 13;
+      thread_id = Thread.id (Thread.self ());
+      stmt_cache = Stmt_cache.create ();
+    }
 
   let raise_error db ?sql ?params ?(errmsg = Sqlite3.errmsg db) errcode =
     let msg = Sqlite3.Rc.to_string errcode ^ " " ^ errmsg in
