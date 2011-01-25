@@ -236,44 +236,6 @@ let profile_uuid =
       ((Unix.times ()).Unix.tms_utime)
   in Digest.to_hex (Digest.string uuid)
 
-let profile_op ?(uuid = profile_uuid) op detail f =
-  match profile_ch with
-      None -> f ()
-    | Some ch ->
-        let t0 = Unix.gettimeofday () in
-        let ret = try Ret (f ()) with e -> Exn e in
-        let dt = Unix.gettimeofday () -. t0 in
-        let elapsed_time_us = int_of_float (1e6 *. dt) in
-          (* the format used by PGOcaml *)
-        let ret_txt = match ret with
-            Ret _ -> "ok"
-          | Exn e -> Printexc.to_string e in
-        let row =
-          [ "1"; uuid; op; string_of_int elapsed_time_us; ret_txt] @
-          detail
-        in Csv.save_out ch [row];
-           flush ch;
-           match ret with
-               Ret r -> r
-             | Exn e -> raise e
-
-(* accept a reversed list of params *)
-let profile_execute_sql sql ?(params = []) f =
-  match profile_ch with
-      None -> f ()
-    | Some ch ->
-        let details =
-          [ "name"; Digest.to_hex (Digest.string sql); "portal"; " " ]
-        in profile_op "execute" details f
-
-let profile_prepare_stmt sql f =
-  match profile_ch with
-      None -> f ()
-    | Some ch ->
-        let details =
-          [ "query"; sql; "name"; Digest.to_hex (Digest.string sql) ]
-        in profile_op "prepare" details f
-
 (* pgocaml_prof wants to see a connect entry *)
 let () =
   Option.may
@@ -286,13 +248,60 @@ let () =
            "port"; "0";
            "prog"; Sys.executable_name
          ]
-       in profile_op "connect" detail (fun () -> ()))
+       in Csv.save_out ch [[ "1"; profile_uuid; "connect"; "0"; "ok" ] @ detail];
+          flush ch)
     profile_ch
 
 module Error(M : THREAD) =
 struct
   let raise_exn exn = M.fail (Error exn)
   let failwithfmt fmt = Printf.ksprintf (fun s -> M.fail (Error (Failure s))) fmt
+end
+
+module Profile(Lwt : Sqlexpr_concurrency.THREAD) =
+struct
+  open Lwt
+  let profile_op ?(uuid = profile_uuid) op detail f =
+    match profile_ch with
+        None -> f ()
+      | Some ch ->
+          let t0 = Unix.gettimeofday () in
+          lwt ret =
+            try_lwt
+              lwt y = f () in
+                return (Ret y)
+            with e -> return (Exn e) in
+          let dt = Unix.gettimeofday () -. t0 in
+          let elapsed_time_us = int_of_float (1e6 *. dt) in
+            (* the format used by PGOcaml *)
+          let ret_txt = match ret with
+              Ret _ -> "ok"
+            | Exn e -> Printexc.to_string e in
+          let row =
+            [ "1"; uuid; op; string_of_int elapsed_time_us; ret_txt] @
+            detail
+          in Csv.save_out ch [row];
+             flush ch;
+             match ret with
+                 Ret r -> return r
+               | Exn e -> raise_lwt e
+
+  (* accept a reversed list of params *)
+  let profile_execute_sql sql ?(params = []) f =
+    match profile_ch with
+        None -> f ()
+      | Some ch ->
+          let details =
+            [ "name"; Digest.to_hex (Digest.string sql); "portal"; " " ]
+          in profile_op "execute" details f
+
+  let profile_prepare_stmt sql f =
+    match profile_ch with
+        None -> f ()
+      | Some ch ->
+          let details =
+            [ "query"; sql; "name"; Digest.to_hex (Digest.string sql) ]
+          in profile_op "prepare" details f
 end
 
 module type POOL =
@@ -324,6 +333,7 @@ struct
   module Lwt = M
   open Lwt
 
+  include Profile(M)
   include Error(M)
 
   module WT = Weak.Make(struct
@@ -541,6 +551,7 @@ struct
   module Lwt = M
   open Lwt
   include Error(M)
+  include Profile(M)
 
   module Directives = Directives
   module Conversion = Conversion
@@ -658,9 +669,8 @@ struct
   let unsafe_execute_prof text db fmt =
     ksprintf
       (fun sql ->
-         profile_prepare_stmt text (fun () -> ());
-         profile_execute_sql text (fun () ->
-           POOL.unsafe_execute db sql))
+         profile_prepare_stmt text (fun () -> return ()) >>
+         profile_execute_sql text (fun () -> POOL.unsafe_execute db sql))
       fmt
 
   let transaction db f =
