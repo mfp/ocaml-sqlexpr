@@ -40,7 +40,6 @@ struct
   let step = wrap Sqlite3.step
   let bind t n v = check_thread t; Sqlite3.bind t.handle n v
   let row_data = wrap Sqlite3.row_data
-  let data_count = wrap Sqlite3.data_count
 end
 
 module Types =
@@ -309,7 +308,6 @@ sig
     ?sql:string -> ?params:Sqlite3.Data.t list -> stmt -> Sqlite3.Rc.t result
   val step_with_last_insert_rowid :
     ?sql:string -> ?params:Sqlite3.Data.t list -> stmt -> Int64.t result
-  val data_count : stmt -> int result
   val reset : stmt -> unit result
   val row_data : stmt -> Sqlite3.Data.t array result
   val raise_error :
@@ -445,7 +443,6 @@ struct
     step ?sql ?params stmt >>
     return (Sqlite3.last_insert_rowid (Stmt.db_handle stmt))
 
-  let data_count stmt = return (Stmt.data_count stmt)
   let reset_with_errcode stmt = return (Stmt.reset stmt)
   let reset stmt = ignore (Stmt.reset stmt); return ()
   let row_data stmt = return (Stmt.row_data stmt)

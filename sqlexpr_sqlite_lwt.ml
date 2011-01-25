@@ -243,9 +243,6 @@ struct
     step ?sql ?params stmt >>
     detach worker (fun dbh () -> Sqlite3.last_insert_rowid dbh) ()
 
-  let data_count (worker, stmt) =
-    detach worker (fun _ -> Stmt.data_count) stmt
-
   let reset_with_errcode (worker, stmt) =
     detach worker (fun _ -> Stmt.reset) stmt
 

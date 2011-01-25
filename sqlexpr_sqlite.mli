@@ -178,7 +178,6 @@ sig
     ?sql:string -> ?params:Sqlite3.Data.t list -> stmt -> Sqlite3.Rc.t result
   val step_with_last_insert_rowid :
     ?sql:string -> ?params:Sqlite3.Data.t list -> stmt -> Int64.t result
-  val data_count : stmt -> int result
   val reset : stmt -> unit result
   val row_data : stmt -> Sqlite3.Data.t array result
   val raise_error :
@@ -207,7 +206,6 @@ sig
   val step : t -> Sqlite3.Rc.t
   val bind : t -> int -> Sqlite3.Data.t -> Sqlite3.Rc.t
   val row_data : t -> Sqlite3.Data.t array
-  val data_count : t -> int
 end
 
 module Stmt_cache :
