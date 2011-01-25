@@ -227,10 +227,15 @@ struct
         failwithfmt "Error with SQL statement %S:\n%s" sql (Printexc.to_string e)
     in
       (* the list of params is reversed *)
-      iteri
-        (fun n v -> check_ok ~sql ~stmt worker
-                      (fun _ -> (Stmt.bind stmt (nparams - n))) v)
-        params >>
+      detach worker
+        (fun dbh stmt ->
+           let n = ref nparams in
+             List.iter
+               (fun v -> match Stmt.bind stmt !n v with
+                    Sqlite3.Rc.OK -> decr n
+                  | code -> do_raise_error ~sql ~params code)
+               params)
+        stmt >>
       try_lwt
         f (worker, stmt) sql params
       finally
