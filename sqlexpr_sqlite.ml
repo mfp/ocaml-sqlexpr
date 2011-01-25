@@ -5,18 +5,27 @@ open ExtList
 exception Error of exn
 exception Sqlite_error of string * Sqlite3.Rc.t
 
-let raise_thread_error () =
-  raise (Error (Failure "Trying to run Sqlite3 function in different thread \
-                         than the one where the db was created."))
-
 let curr_thread_id () = Thread.id (Thread.self ())
+
+let raise_thread_error ?msg expected =
+  let actual = curr_thread_id () in
+  let s =
+    sprintf
+      "Trying to run Sqlite3 function in different thread \
+       than the one where the db was created \
+       (expected %d, got %d)%s."
+      expected
+      actual
+      (Option.map_default ((^) " ") "" msg)
+  in raise (Error (Failure s))
 
 module Stmt =
 struct
   type t = { thread_id : int; dbhandle : Sqlite3.db; handle : Sqlite3.stmt; }
 
   let check_thread t =
-    if curr_thread_id () <> t.thread_id then raise_thread_error ()
+    if curr_thread_id () <> t.thread_id then
+      raise_thread_error ~msg:"in Stmt" t.thread_id
 
   let wrap f t = check_thread t; f t.handle
 
@@ -340,7 +349,8 @@ struct
   let get_handle db = db.handle
 
   let handle db =
-    if db.thread_id <> curr_thread_id () then raise_thread_error ();
+    if db.thread_id <> curr_thread_id () then
+      raise_thread_error ~msg:"in IdentityPool.handle" db.thread_id;
     db.handle
 
   let close_db db =

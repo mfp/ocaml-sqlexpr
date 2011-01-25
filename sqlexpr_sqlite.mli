@@ -193,8 +193,6 @@ module Make_gen :
       S with type 'a result = 'a M.t
 
 (**/**)
-val raise_thread_error : unit -> 'a
-val curr_thread_id : unit -> int
 val prettify_sql_stmt : string -> string
 val string_of_param : Sqlite3.Data.t -> string
 val string_of_params : Sqlite3.Data.t list -> string
