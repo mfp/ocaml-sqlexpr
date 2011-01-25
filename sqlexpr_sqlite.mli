@@ -61,12 +61,16 @@ sig
   (** Close the DB and finalize all the associated prepared statements. *)
   val close_db : db -> unit
 
-  (** [with_single_worker db f] evaluates [f db'] where [db'] borrows a 'worker'
-    * from [db] and is only valid inside [f]. Use this e.g. if you have an
+  (** [borrow_worker db f] evaluates [f db'] where [db'] borrows a 'worker'
+    * from [db] and is only valid inside [f]. If [f] has got a sequence of
+    * operations of the form [ lwt x1 = g1 db in let x2 = g2 db in ...],
+    * [gN] will all use the same worker (note that this doesn't hold if you
+    * have nested iter/fold/select operations). Use this e.g. if you have an
     * in-mem database and a number of operations that must go against the same
     * instance (since data is not shared across different [:memory:]
-    * databases). *)
-  val with_single_worker : db -> (db -> 'a result) -> 'a result
+    * databases). [db'] inherits the [max_thread] limit from [db], but keeps
+    * its own list of workers and will spawn new ones as needed. *)
+  val borrow_worker : db -> (db -> 'a result) -> 'a result
 
   (** Execute a SQL statement. *)
   val execute : db -> ('a, unit result) statement -> 'a
@@ -194,7 +198,7 @@ sig
     stmt -> ?sql:string -> ?params:Sqlite3.Data.t list -> ?errmsg:string ->
     Sqlite3.Rc.t -> 'a result
   val unsafe_execute : db -> string -> unit result
-  val with_single_worker : db -> (db -> 'a result) -> 'a result
+  val borrow_worker : db -> (db -> 'a result) -> 'a result
 end
 
 module Make_gen :

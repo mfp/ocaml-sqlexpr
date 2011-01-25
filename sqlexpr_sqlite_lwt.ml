@@ -264,7 +264,7 @@ struct
                  Some id -> Stmt_cache.add_stmt worker.stmt_cache id stmt; return ()
                | None -> return ())
 
-  let with_single_worker db f =
+  let borrow_worker db f =
     let db' = open_db ~init:db.init_func db.file in
     lwt worker = get_worker db in
     let worker_id w = Thread.id w.thread in
