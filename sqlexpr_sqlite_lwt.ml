@@ -126,6 +126,11 @@ struct
       res
     end
 
+  let check_worker_finished worker =
+    if worker.finished then
+      failwith (sprintf "worker %d (db %d:%S) is finished!"
+                  (Thread.id worker.thread) worker.db.id worker.db.file)
+
   let detach worker f args =
     let result = ref `Nothing in
     let task dbh =
@@ -144,10 +149,8 @@ struct
                  wakeup wakener value
              | `Failure exn ->
                  wakeup_exn wakener exn)
-    in
-    try_lwt
-      if worker.finished then
-        failwith (sprintf "worker %d is finished!" (Thread.id worker.thread));
+    in try_lwt
+      check_worker_finished worker;
       (* Send the id and the task to the worker: *)
       Event.sync (Event.send worker.task_channel (id, task));
       waiter
@@ -187,9 +190,7 @@ struct
 
   let prepare db f (params, nparams, sql, stmt_id) =
     lwt worker = get_worker db in
-    if worker.finished then
-      failwithfmt "worker %d (db %d) is finished!" (Thread.id worker.thread) db.id
-    else
+    (try_lwt return (check_worker_finished worker)) >>
     lwt stmt =
       try_lwt
         match stmt_id with
