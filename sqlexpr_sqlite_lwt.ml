@@ -49,7 +49,9 @@ struct
            if not worker.finished then begin
              let id = Lwt_unix.make_notification ~once:true (fun () -> ()) in
                Event.sync (Event.send worker.task_channel (id, (fun _ -> ())));
-           end)
+           end;
+           (* wait for the thread to terminate and free associated resources *)
+           Thread.join worker.thread)
         db.workers
 
   let new_id =
