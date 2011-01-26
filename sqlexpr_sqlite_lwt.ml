@@ -250,19 +250,23 @@ struct
           raise_lwt (Error (s, e))
     in
       (* the list of params is reversed *)
-      detach worker
-        (fun dbh stmt ->
-           let n = ref nparams in
-             List.iter
-               (fun v -> match Stmt.bind stmt !n v with
-                    Sqlite3.Rc.OK -> decr n
-                  | code -> add_worker db worker; do_raise_error ~sql ~params code)
-               params)
-        stmt >>
+      begin try_lwt
+        detach worker
+          (fun dbh stmt ->
+             let n = ref nparams in
+               List.iter
+                 (fun v -> match Stmt.bind stmt !n v with
+                      Sqlite3.Rc.OK -> decr n
+                    | code -> do_raise_error ~sql ~params code)
+                 params)
+          stmt
+        finally
+          add_worker db worker;
+          return ()
+      end >>
       profile_execute_sql sql ~params
         (fun () ->
            try_lwt
-             add_worker db worker;
              f (worker, stmt) sql params
            finally
              match stmt_id with
