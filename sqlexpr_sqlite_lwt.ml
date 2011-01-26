@@ -269,9 +269,9 @@ struct
     let db' = open_db ~init:db.init_func db.file in
     lwt worker = get_worker db in
     let worker_id w = Thread.id w.thread in
-      add_worker db' worker;
+      add_worker db' { worker with db = db' } ;
       try_lwt
-        f db
+        f db'
       finally
         (* remove [worker] from db'.workers queue, transfer it to the original
          * db and close db'  *)
