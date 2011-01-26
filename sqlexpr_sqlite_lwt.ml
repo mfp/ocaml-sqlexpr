@@ -207,10 +207,6 @@ struct
   let check_ok ?stmt ?sql ?params worker f x =
     lwt _ = run ?stmt ?sql ?params worker f x in return ()
 
-  let rec iteri ?(i = 0) f = function
-      [] -> return ()
-    | hd :: tl -> f i hd >> iteri ~i:(i + 1) f tl
-
   let prepare db f (params, nparams, sql, stmt_id) =
     lwt worker = get_worker db in
     (try_lwt return (check_worker_finished worker)) >>
