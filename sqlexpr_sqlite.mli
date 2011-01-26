@@ -11,11 +11,11 @@ type st = Types.st
 
 (** All the exceptions raised by the code in {Sqlexpr_sqlite} are wrapped in
     Error except when indicated otherwise. *)
-exception Error of exn
+exception Error of string * exn
 
 (** Errors reported by SQLite are converted into [Sqlite_error _] exceptions,
     so they can be matched with
-    [try ... with Sqlexpr.Error (Sqlexpr.sqlite_error _)] *)
+    [try ... with Sqlexpr.Error (_, Sqlexpr.sqlite_error _)] *)
 exception Sqlite_error of string * Sqlite3.Rc.t
 
 (**  *)
@@ -44,7 +44,7 @@ sig
 
   (** Exception identical to the toplevel [Error], provided for convenience.
       Note that [Sqlexpr_sqlite.Error _] matches this exception. *)
-  exception Error of exn
+  exception Error of string * exn
 
   (** Exception identical to the toplevel [Sqlite_error], provided for
       convenience.  Note that [Sqlexpr_sqlite.Sqlite_error _] matches this

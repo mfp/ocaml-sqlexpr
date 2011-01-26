@@ -53,7 +53,8 @@ struct
   let close_db db =
     db.max_threads <- 0;
     db.db_finished <- true;
-    let e = Error (Failure (sprintf "Handle closed for DB %S" db.file)) in
+    let msg = sprintf "Handle closed for DB %S" db.file in
+    let e = Error (msg, Failure msg) in
       Lwt_sequence.iter_l (fun u -> wakeup_exn u e) db.waiters;
       Queue.iter
         (fun worker ->
@@ -187,7 +188,7 @@ struct
         None | Some [] -> msg
       | Some params ->
           sprintf "%s with params %s" msg (string_of_params (List.rev params))
-    in raise (Error (Sqlite_error (msg, errcode)))
+    in raise (Error (msg, Sqlite_error (msg, errcode)))
 
   let raise_error worker ?sql ?params ?errmsg errcode =
     lwt errmsg = match errmsg with
@@ -241,7 +242,8 @@ struct
                          return stmt)
       with e ->
         add_worker db worker;
-        failwithfmt "Error with SQL statement %S:\n%s" sql (Printexc.to_string e)
+        let s = sprintf "Error with SQL statement %s" sql in
+          raise_lwt (Error (s, e))
     in
       (* the list of params is reversed *)
       detach worker

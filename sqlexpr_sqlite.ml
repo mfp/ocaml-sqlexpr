@@ -2,7 +2,7 @@
 open Printf
 open ExtList
 
-exception Error of exn
+exception Error of string * exn
 exception Sqlite_error of string * Sqlite3.Rc.t
 
 let curr_thread_id () = Thread.id (Thread.self ())
@@ -17,7 +17,7 @@ let raise_thread_error ?msg expected =
       expected
       actual
       (Option.map_default ((^) " ") "" msg)
-  in raise (Error (Failure s))
+  in raise (Error (s, (Failure s)))
 
 module Stmt =
 struct
@@ -53,9 +53,8 @@ include Types
 let () =
   Printexc.register_printer
     (function
-       | Error exn ->
-           Some (sprintf "Sqlexpr_sqlite.Error %s"
-                   (Printexc.to_string exn))
+       | Error (s, exn) ->
+           Some (sprintf "Sqlexpr_sqlite.Error (%S, %s)" s (Printexc.to_string exn))
        | Sqlite_error (s, rc) ->
            Some (sprintf "Sqlexpr_sqlite.Sqlite_error (%S, %s)"
                    s (Sqlite3.Rc.to_string rc))
@@ -254,8 +253,8 @@ let () =
 
 module Error(M : THREAD) =
 struct
-  let raise_exn exn = M.fail (Error exn)
-  let failwithfmt fmt = Printf.ksprintf (fun s -> M.fail (Error (Failure s))) fmt
+  let raise_exn ?(msg="") exn = M.fail (Error (msg, exn))
+  let failwithfmt fmt = Printf.ksprintf (fun s -> M.fail (Error (s, Failure s))) fmt
 end
 
 module Profile(Lwt : Sqlexpr_concurrency.THREAD) =
@@ -394,7 +393,7 @@ struct
         None | Some [] -> msg
       | Some params ->
           sprintf "%s with params %s" msg (string_of_params (List.rev params))
-    in M.fail (Error (Sqlite_error (msg, errcode)))
+    in M.fail (Error (msg, Sqlite_error (msg, errcode)))
 
   let rec run ?stmt ?sql ?params db f x = match f x with
       Sqlite3.Rc.OK | Sqlite3.Rc.ROW | Sqlite3.Rc.DONE as r -> return r
@@ -437,7 +436,9 @@ struct
                          WT.add db.stmts stmt;
                          return stmt)
       with e ->
-        failwithfmt "Error with SQL statement %S:\n%s" sql (Printexc.to_string e) in
+        let msg =
+          sprintf "Error with SQL statement %S:\n%s" sql (Printexc.to_string e)
+        in raise_exn ~msg e in
     let rec iteri ?(i = 0) f = function
         [] -> return ()
       | hd :: tl -> f i hd >> iteri ~i:(i + 1) f tl
@@ -495,7 +496,7 @@ sig
 
   type db
 
-  exception Error of exn
+  exception Error of string * exn
   exception Sqlite_error of string * Sqlite3.Rc.t
 
   val open_db : ?init:(Sqlite3.db -> unit) -> string -> db
