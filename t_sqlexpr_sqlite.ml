@@ -212,35 +212,60 @@ struct
             return ()
     end ()
 
+  let rec do_test_nested_iter_and_fold db () =
+    nested_iter_and_fold_write db >>
+    nested_iter_and_fold_read db
+
+  and nested_iter_and_fold_write db =
+    S.execute db sql"CREATE TABLE foo(n INTEGER NOT NULL)" >>
+    iter (S.execute db sqlc"INSERT INTO foo(n) VALUES(%d)") [1; 2; 3]
+
+  and nested_iter_and_fold_read db =
+    let q = Queue.create () in
+    let expected =
+      List.rev [ 1, 3; 1, 2; 1, 1; 2, 3; 2, 2; 2, 1; 3, 3; 3, 2; 3, 1; ] in
+    let inner = sqlc"SELECT @d{n} FROM foo ORDER BY n DESC" in
+    let outer = sqlc"SELECT @d{n} FROM foo ORDER BY n ASC" in
+    let printer (a, b) = sprintf "(%d, %d)" a b in
+    lwt () =
+      S.iter db
+        (fun a -> S.iter db (fun b -> Queue.push (a, b) q; return ()) inner)
+        outer
+    in
+      aeq_list ~printer expected (Queue.fold (fun l x -> x :: l) [] q);
+      lwt l =
+        S.fold db
+          (fun l a -> S.fold db (fun l b -> return ((a, b) :: l)) l inner)
+          []
+          outer
+      in aeq_list ~printer expected l;
+         return ()
+
   let test_nested_iter_and_fold () =
     (* nested iter/folds will spawn multiple Sqlexpr_sqlite_lwt workers, so
      * cannot use in-mem DB, lest the table not be created in other workers
      * than the one where it was created *)
-    with_db ~in_mem:false begin fun db () ->
-      S.execute db sql"CREATE TABLE foo(n INTEGER NOT NULL)" >>
-      iter (S.execute db sqlc"INSERT INTO foo(n) VALUES(%d)") [1; 2; 3] >>
-      let q = Queue.create () in
-      let expected =
-        List.rev [ 1, 3; 1, 2; 1, 1; 2, 3; 2, 2; 2, 1; 3, 3; 3, 2; 3, 1; ] in
-      let inner = sqlc"SELECT @d{n} FROM foo ORDER BY n DESC" in
-      let outer = sqlc"SELECT @d{n} FROM foo ORDER BY n ASC" in
-      let printer (a, b) = sprintf "(%d, %d)" a b in
-      lwt () =
-        S.iter db
-          (fun a -> S.iter db (fun b -> Queue.push (a, b) q; return ()) inner)
-          outer
-      in
-        aeq_list ~printer expected (Queue.fold (fun l x -> x :: l) [] q);
-        lwt l =
-          S.fold db
-            (fun l a -> S.fold db (fun l b -> return ((a, b) :: l)) l inner)
-            []
-            outer
-        in aeq_list ~printer expected l;
-           return ()
+    with_db ~in_mem:false do_test_nested_iter_and_fold ()
+
+  let expect_missing_table tbl f =
+    try_lwt
+      f () >>
+      assert_failure (sprintf "Expected Sqlite3.Error: missing table %s" tbl)
+    with Sqlexpr_sqlite.Error _ -> return ()
+
+  let test_borrow_worker () =
+    with_db begin fun db () ->
+      S.borrow_worker db
+        (fun db' ->
+           S.borrow_worker db (fun db'' -> do_test_nested_iter_and_fold db'' ()) >>
+           expect_missing_table "foo" (fun () -> nested_iter_and_fold_read db')) >>
+      expect_missing_table "foo" (fun () -> nested_iter_and_fold_read db)
     end ()
 
-  let all_tests =
+  let test_borrow_worker has_real_borrow_worker () =
+    if has_real_borrow_worker then test_borrow_worker () else return ()
+
+  let all_tests has_real_borrow_worker =
     [
       "Directives" >::: test_directives;
       "Outputs" >::: test_outputs;
@@ -248,6 +273,7 @@ struct
       "Transactions" >:: test_transaction;
       "Fold and iter" >:: test_fold_and_iter;
       "Nested fold and iter" >:: test_nested_iter_and_fold;
+      "Borrow worker" >:: test_borrow_worker has_real_borrow_worker;
     ]
 end
 
@@ -270,11 +296,11 @@ end
 let all_tests =
   [
     (let module M = Test(IdConc)(Sqlexpr_sqlite.Make(IdConc)) in
-      "Sqlexpr_sqlite.Make(Sqlexpr_concurrency.Id)" >::: M.all_tests);
+      "Sqlexpr_sqlite.Make(Sqlexpr_concurrency.Id)" >::: M.all_tests false);
     (let module M = Test(LwtConc)(Sqlexpr_sqlite.Make(LwtConc)) in
-      "Sqlexpr_sqlite.Make(LwtConcurrency)" >::: M.all_tests);
+      "Sqlexpr_sqlite.Make(LwtConcurrency)" >::: M.all_tests false);
     (let module M = Test(LwtConc)(Sqlexpr_sqlite_lwt) in
-      "Sqlexpr_sqlite_lwt" >::: M.all_tests);
+      "Sqlexpr_sqlite_lwt" >::: M.all_tests true);
   ]
 
 let _ =
