@@ -172,12 +172,16 @@ struct
                  wakeup wakener value
              | `Failure exn ->
                  wakeup_exn wakener exn)
-    in Lwt_mutex.with_lock worker.mutex
-         (fun () -> try_lwt
-            check_worker_finished worker;
-            (* Send the id and the task to the worker: *)
-            Event.sync (Event.send worker.task_channel (id, task));
-            waiter)
+    in
+      Lwt_mutex.with_lock worker.mutex
+        (fun () ->
+           try_lwt
+             check_worker_finished worker;
+             (* Send the id and the task to the worker: *)
+             Event.sync (Event.send worker.task_channel (id, task));
+             return ()
+           with e -> wakeup_exn wakener e; return ()) >>
+      waiter
 
   let do_raise_error ?sql ?params ?errmsg errcode =
     let msg = Sqlite3.Rc.to_string errcode ^ Option.map_default ((^) " ") "" errmsg in
