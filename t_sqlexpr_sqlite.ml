@@ -255,11 +255,13 @@ struct
 
   let test_borrow_worker () =
     with_db begin fun db () ->
+      (* we borrow a worker repeatedly, but since we're doing everything
+       * sequentially we end up using the same one all the time *)
       S.borrow_worker db
         (fun db' ->
            S.borrow_worker db (fun db'' -> do_test_nested_iter_and_fold db'' ()) >>
-           expect_missing_table "foo" (fun () -> nested_iter_and_fold_read db')) >>
-      expect_missing_table "foo" (fun () -> nested_iter_and_fold_read db)
+           nested_iter_and_fold_read db') >>
+      nested_iter_and_fold_read db
     end ()
 
   let test_borrow_worker has_real_borrow_worker () =

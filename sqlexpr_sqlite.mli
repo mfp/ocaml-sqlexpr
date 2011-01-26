@@ -62,14 +62,12 @@ sig
   val close_db : db -> unit
 
   (** [borrow_worker db f] evaluates [f db'] where [db'] borrows a 'worker'
-    * from [db] and is only valid inside [f]. If [f] has got a sequence of
-    * operations of the form [ lwt x1 = g1 db in let x2 = g2 db in ...],
-    * [gN] will all use the same worker (note that this doesn't hold if you
-    * have nested iter/fold/select operations). Use this e.g. if you have an
-    * in-mem database and a number of operations that must go against the same
+    * from [db] and [db'] is only valid inside [f]. All the operations on
+    * [db'] will use the same worker. Use this e.g. if you have an in-mem
+    * database and a number of operations that must go against the same
     * instance (since data is not shared across different [:memory:]
-    * databases). [db'] inherits the [max_thread] limit from [db], but keeps
-    * its own list of workers and will spawn new ones as needed. *)
+    * databases). [db'] will not spawn new workers and will be closed and
+    * invalidated automatically. *)
   val borrow_worker : db -> (db -> 'a result) -> 'a result
 
   (** Execute a SQL statement. *)
