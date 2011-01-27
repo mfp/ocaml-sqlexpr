@@ -30,7 +30,7 @@ struct
   let wrap f t = check_thread t; f t.handle
 
   let prepare dbhandle sql =
-    { thread_id = curr_thread_id (); dbhandle;
+    { thread_id = curr_thread_id (); dbhandle = dbhandle;
       handle = Sqlite3.prepare dbhandle sql; }
 
   let db_handle t = t.dbhandle

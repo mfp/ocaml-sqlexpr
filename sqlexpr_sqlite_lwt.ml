@@ -74,7 +74,7 @@ struct
     let id = new_id () in
     let r =
       {
-        id; file;
+        id = id; file = file;
         max_threads = !max_threads;
         waiters = Lwt_sequence.create ();
         workers = Queue.create ();
