@@ -173,17 +173,22 @@ struct
              | `Failure exn ->
                  wakeup_exn wakener exn)
     in
-      Lwt_mutex.with_lock worker.worker_thread.mutex
-        (fun () ->
-           try_lwt
-             check_worker_finished worker;
-             (* Send the id and the task to the worker: *)
-             Event.sync
-               (Event.send worker.worker_thread.task_channel
-                  (id, (task worker.handle)));
-             return ()
-           with e -> wakeup_exn wakener e; return ()) >>
-      waiter
+      try_lwt
+        WSet.remove worker.db.free_workers worker;
+        Lwt_mutex.with_lock worker.worker_thread.mutex
+          (fun () ->
+             try_lwt
+               check_worker_finished worker;
+               (* Send the id and the task to the worker: *)
+               Event.sync
+                 (Event.send worker.worker_thread.task_channel
+                    (id, (task worker.handle)));
+               return ()
+             with e -> wakeup_exn wakener e; return ()) >>
+        waiter
+      finally
+        WSet.add worker.db.free_workers worker;
+        return ()
 
   let () = do_detach := detach
 
