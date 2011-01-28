@@ -20,33 +20,64 @@ struct
                           let hash = Hashtbl.hash
                           let equal = (==)
                         end)
+  module rec Ty :
+  sig
+    type db = {
+      id : int;
+      file : string;
+      mutable db_finished : bool;
+      mutable max_workers : int;
+      mutable worker_count : int;
+      init_func : Sqlite3.db -> unit;
+      mutable workers : worker list;
+      free_workers : WSet.t;
+      db_waiters : worker Lwt.u Lwt_sequence.t;
+    }
 
-  type db = {
-    id : int;
-    file : string;
-    mutable db_finished : bool;
-    mutable max_workers : int;
-    mutable worker_count : int;
-    init_func : Sqlite3.db -> unit;
-    mutable workers : worker list;
-    free_workers : worker Queue.t;
-    db_waiters : worker Lwt.u Lwt_sequence.t;
-  }
+    and thread = {
+      mutable thread : Thread.t;
+      task_channel : (int * (unit -> unit)) Event.channel;
+      mutex : Lwt_mutex.t;
+    }
 
-  and thread = {
-    mutable thread : Thread.t;
-    task_channel : (int * (unit -> unit)) Event.channel;
-    mutex : Lwt_mutex.t;
-  }
+    and worker =
+    {
+      worker_id : int;
+      mutable handle : Sqlite3.db;
+      stmts : WT.t;
+      stmt_cache : Stmt_cache.t;
+      worker_thread : thread;
+      db : db;
+    }
+  end = Ty
 
-  and worker =
-  {
-    mutable handle : Sqlite3.db;
-    stmts : WT.t;
-    stmt_cache : Stmt_cache.t;
-    worker_thread : thread;
-    db : db;
-  }
+  and WSet : sig
+    type t
+    val create : unit -> t
+    val is_empty : t -> bool
+    val add : t -> Ty.worker -> unit
+    val take : t -> Ty.worker
+    val remove : t -> Ty.worker -> unit
+  end = struct
+    module S =
+      Set.Make(struct
+                 type t = Ty.worker
+                 let compare w1 w2 = w1.Ty.worker_id - w2.Ty.worker_id
+               end)
+    type t = S.t ref
+
+    let create () = ref S.empty
+    let is_empty t = S.is_empty !t
+    let add t x = t := S.add x !t
+    let remove t x = t := S.remove x !t
+
+    let take t =
+      let x = S.min_elt !t in
+        remove t x;
+        x
+  end
+
+  include Ty
 
   type stmt = worker * Stmt.t
   type 'a result = 'a Lwt.t
@@ -93,7 +124,8 @@ struct
     let r =
       {
         id = id; file = file; init_func = init; max_workers = !max_threads;
-        worker_count = 0; workers = []; free_workers = Queue.create ();
+        worker_count = 0; workers = [];
+        free_workers = WSet.create ();
         db_waiters = Lwt_sequence.create ();
         db_finished = false;
       }
@@ -164,7 +196,7 @@ struct
   (* Add a worker to the pool: *)
   let add_worker db worker =
     match Lwt_sequence.take_opt_l db.db_waiters with
-      | None -> Queue.add worker db.free_workers
+      | None -> WSet.add db.free_workers worker
       | Some w -> wakeup w worker
 
   (* Wait for thread to be available, then return it: *)
@@ -187,6 +219,7 @@ struct
         let worker =
           {
             db = db;
+            worker_id = new_id ();
             handle = Sqlite3.db_open ":memory:";
             stmts = WT.create 13;
             stmt_cache = Stmt_cache.create ();
@@ -244,8 +277,8 @@ struct
 
   (* Wait for worker to be available, then return it: *)
   let rec get_worker db =
-    if not (Queue.is_empty db.free_workers) then
-      return (Queue.take db.free_workers)
+    if not (WSet.is_empty db.free_workers) then
+      return (WSet.take db.free_workers)
     else if db.worker_count < db.max_workers then
       make_worker db
     else begin
