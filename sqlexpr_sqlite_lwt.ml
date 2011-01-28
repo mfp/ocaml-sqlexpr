@@ -24,12 +24,19 @@ struct
   type db = {
     id : int;
     file : string;
-    mutable max_threads : int;
-    workers : worker Queue.t;
-    waiters : worker Lwt.u Lwt_sequence.t;
-    mutable thread_count : int;
     mutable db_finished : bool;
+    mutable max_workers : int;
+    mutable worker_count : int;
     init_func : Sqlite3.db -> unit;
+    mutable workers : worker list;
+    free_workers : worker Queue.t;
+    db_waiters : worker Lwt.u Lwt_sequence.t;
+  }
+
+  and thread = {
+    mutable thread : Thread.t;
+    task_channel : (int * (unit -> unit)) Event.channel;
+    mutex : Lwt_mutex.t;
   }
 
   and worker =
@@ -37,34 +44,45 @@ struct
     mutable handle : Sqlite3.db;
     stmts : WT.t;
     stmt_cache : Stmt_cache.t;
-    task_channel : (int * (Sqlite3.db -> unit)) Event.channel;
-    mutable thread : Thread.t;
-    mutable finished : bool;
-    db : db; (* keep ref to db so it isn't GCed while a worker is active *)
-    mutex : Lwt_mutex.t;
+    worker_thread : thread;
+    db : db;
   }
 
   type stmt = worker * Stmt.t
   type 'a result = 'a Lwt.t
 
   let max_threads = ref 4
-  let set_default_max_threads n = max_threads := n
+  let set_max_threads n = max_threads := max n !max_threads
 
-  let close_db db =
-    db.max_threads <- 0;
+  (* Total number of threads currently running: *)
+  let thread_count = ref 0
+
+  (* Pool of threads: *)
+  let threads : thread Queue.t = Queue.create ()
+
+  (* Queue of clients waiting for a thread to be available: *)
+  let waiters : thread Lwt.u Lwt_sequence.t = Lwt_sequence.create ()
+
+  (* will be set to [detach] later, done this way to avoid cumbersome gigantic
+   * let rec definition *)
+  let do_detach = ref (fun _ _ _ -> return ())
+
+  let rec close_db db =
     db.db_finished <- true;
-    let msg = sprintf "Handle closed for DB %S" db.file in
-    let e = Error (msg, Failure msg) in
-      Lwt_sequence.iter_l (fun u -> wakeup_exn u e) db.waiters;
-      Queue.iter
-        (fun worker ->
-           if not worker.finished then begin
-             let id = Lwt_unix.make_notification ~once:true (fun () -> ()) in
-               Event.sync (Event.send worker.task_channel (id, (fun _ -> ())));
-           end;
-           (* wait for the thread to terminate and free associated resources *)
-           Thread.join worker.thread)
-        db.workers
+    List.iter close_worker db.workers
+
+  and close_worker w =
+    Stmt_cache.flush_stmts w.stmt_cache;
+    (* must run Stmt.finalize and Sqlite3.db_close in the same thread where
+     * the handles were created! *)
+    ignore begin try_lwt
+      !do_detach w
+        (fun handle () ->
+           WT.iter (fun stmt -> Stmt.finalize stmt) w.stmts;
+           ignore (Sqlite3.db_close handle))
+        ()
+    with e -> return () (* FIXME: log? *)
+    end
 
   let new_id =
     let n = ref 0 in
@@ -74,89 +92,39 @@ struct
     let id = new_id () in
     let r =
       {
-        id = id; file = file;
-        max_threads = !max_threads;
-        waiters = Lwt_sequence.create ();
-        workers = Queue.create ();
-        thread_count = 0;
-        init_func = init;
+        id = id; file = file; init_func = init; max_workers = !max_threads;
+        worker_count = 0; workers = []; free_workers = Queue.create ();
+        db_waiters = Lwt_sequence.create ();
         db_finished = false;
       }
-    in Gc.finalise close_db r;
-       r
-
-  let close_worker w =
-    w.finished <- true;
-    try
-      WT.iter (fun stmt -> Stmt.finalize stmt) w.stmts;
-      Stmt_cache.flush_stmts w.stmt_cache;
-      ignore (Sqlite3.db_close w.handle)
-    with Sqlite3.Error _ -> () (* FIXME: raise? *)
-
-  let worker_loop worker () =
-    let rec do_worker_loop () =
-      let id, task = Event.sync (Event.receive worker.task_channel) in
-      let break = ref false in
-        task worker.handle;
-        if worker.db.thread_count > worker.db.max_threads then break := true;
-        Lwt_unix.send_notification id;
-        if not !break then
-          do_worker_loop ()
-        else begin
-          worker.finished <- true;
-          close_worker worker
-        end
     in
-      worker.handle <- Sqlite3.db_open worker.db.file;
-      worker.db.init_func worker.handle;
-      do_worker_loop ()
+      Gc.finalise close_db r;
+      r
 
-  let make_worker db =
-    db.thread_count <- db.thread_count + 1;
-    let worker =
+  let rec thread_loop thread =
+    let id, task = Event.sync (Event.receive thread.task_channel) in
+      task ();
+      Lwt_unix.send_notification id;
+      thread_loop thread
+
+  let make_thread () =
+    let t =
       {
-        db = db;
-        handle = Sqlite3.db_open ":memory:";
-        stmts = WT.create 13;
-        stmt_cache = Stmt_cache.create ();
-        task_channel = Event.new_channel ();
         thread = Thread.self ();
-        finished = false;
+        task_channel = Event.new_channel ();
         mutex = Lwt_mutex.create ();
-      }
-    in worker.thread <- Thread.create (worker_loop worker) ();
-       worker
-
-  (* Add a worker to the pool: *)
-  let add_worker db worker =
-    match Lwt_sequence.take_opt_l db.waiters with
-      | None -> Queue.add worker db.workers
-      | Some w -> wakeup w worker
-
-  (* Wait for worker to be available, then return it: *)
-  let rec get_worker db =
-    if not (Queue.is_empty db.workers) then
-      return (Queue.take db.workers)
-    else if db.thread_count < db.max_threads then
-      return (make_worker db)
-    else begin
-      let (res, w) = Lwt.task () in
-      let node = Lwt_sequence.add_r w db.waiters in
-      Lwt.on_cancel res (fun _ -> Lwt_sequence.remove node);
-      res
-    end
+      } in
+      t.thread <- Thread.create thread_loop t;
+      incr thread_count;
+      t
 
   let check_worker_finished worker =
-    if worker.finished then
-      failwith (sprintf "worker %d (db %d:%S) is finished!"
-                  (Thread.id worker.thread) worker.db.id worker.db.file);
     if worker.db.db_finished then
-      failwith (sprintf "(db %d:%S) for worker %d is finished!"
-                  worker.db.id worker.db.file (Thread.id worker.thread))
+      failwith (sprintf "db %d:%S is closed" worker.db.id worker.db.file)
 
   let detach worker f args =
     let result = ref `Nothing in
-    let task dbh =
+    let task dbh () =
       try
         result := `Success (f dbh args)
       with exn ->
@@ -173,15 +141,74 @@ struct
              | `Failure exn ->
                  wakeup_exn wakener exn)
     in
-      Lwt_mutex.with_lock worker.mutex
+      Lwt_mutex.with_lock worker.worker_thread.mutex
         (fun () ->
            try_lwt
              check_worker_finished worker;
              (* Send the id and the task to the worker: *)
-             Event.sync (Event.send worker.task_channel (id, task));
+             Event.sync
+               (Event.send worker.worker_thread.task_channel
+                  (id, (task worker.handle)));
              return ()
            with e -> wakeup_exn wakener e; return ()) >>
       waiter
+
+  let () = do_detach := detach
+
+  (* Add a thread to the pool: *)
+  let add_thread thread =
+    match Lwt_sequence.take_opt_l waiters with
+      | None -> Queue.add thread threads
+      | Some t -> wakeup t thread
+
+  (* Add a worker to the pool: *)
+  let add_worker db worker =
+    match Lwt_sequence.take_opt_l db.db_waiters with
+      | None -> Queue.add worker db.free_workers
+      | Some w -> wakeup w worker
+
+  (* Wait for thread to be available, then return it: *)
+  let rec get_thread () =
+    if not (Queue.is_empty threads) then
+      return (Queue.take threads)
+    else if thread_count < max_threads then
+      return (make_thread ())
+    else begin
+      let (res, w) = Lwt.task () in
+      let node = Lwt_sequence.add_r w waiters in
+      Lwt.on_cancel res (fun _ -> Lwt_sequence.remove node);
+      res
+    end
+
+  let make_worker db =
+    db.worker_count <- db.worker_count + 1;
+    lwt thread = get_thread () in
+      try_lwt
+        let worker =
+          {
+            db = db;
+            handle = Sqlite3.db_open ":memory:";
+            stmts = WT.create 13;
+            stmt_cache = Stmt_cache.create ();
+            worker_thread = thread;
+          } in
+        lwt handle =
+          detach worker
+            (fun _ () ->
+               let handle = Sqlite3.db_open db.file in
+                 db.init_func handle;
+                 handle)
+            ()
+        in worker.handle <- handle;
+           db.workers <- worker :: db.workers;
+           add_worker db worker;
+           return worker
+      with e ->
+        db.worker_count <- db.worker_count - 1;
+        raise_lwt e
+      finally
+        add_thread thread;
+        return ()
 
   let do_raise_error ?sql ?params ?errmsg errcode =
     let msg = Sqlite3.Rc.to_string errcode ^ Option.map_default ((^) " ") "" errmsg in
@@ -214,6 +241,19 @@ struct
 
   let check_ok ?stmt ?sql ?params worker f x =
     lwt _ = run ?stmt ?sql ?params worker f x in return ()
+
+  (* Wait for worker to be available, then return it: *)
+  let rec get_worker db =
+    if not (Queue.is_empty db.free_workers) then
+      return (Queue.take db.free_workers)
+    else if db.worker_count < db.max_workers then
+      make_worker db
+    else begin
+      let (res, w) = Lwt.task () in
+      let node = Lwt_sequence.add_r w db.db_waiters in
+      Lwt.on_cancel res (fun _ -> Lwt_sequence.remove node);
+      res
+    end
 
   let prepare db f (params, nparams, sql, stmt_id) =
     lwt worker = get_worker db in
@@ -274,14 +314,14 @@ struct
                | None -> return ())
 
   let borrow_worker db f =
-    let db' = { open_db ~init:db.init_func db.file with max_threads = 1 } in
+    let db' = { open_db ~init:db.init_func db.file with max_workers = 1 } in
     lwt worker = get_worker db in
       add_worker db' { worker with db = db' } ;
       add_worker db worker;
       try_lwt
         f db'
       finally
-        Queue.clear db'.workers;
+        db'.workers <- [];
         close_db db';
         return ()
 
