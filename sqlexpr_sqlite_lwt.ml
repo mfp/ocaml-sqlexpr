@@ -11,6 +11,13 @@ struct
   let sleep = Lwt_unix.sleep
 end
 
+(* Total number of threads currently running: *)
+let thread_count = ref 0
+
+(* Max allowed number of threads *)
+let max_threads = ref 4
+let set_max_threads n = max_threads := max n !thread_count; !max_threads
+
 module POOL =
 struct
   include Sqlexpr_sqlite.Profile(CONC)
@@ -81,12 +88,6 @@ struct
 
   type stmt = worker * Stmt.t
   type 'a result = 'a Lwt.t
-
-  let max_threads = ref 4
-  let set_max_threads n = max_threads := max n !max_threads
-
-  (* Total number of threads currently running: *)
-  let thread_count = ref 0
 
   (* Pool of threads: *)
   let threads : thread Queue.t = Queue.create ()
@@ -208,7 +209,7 @@ struct
   let rec get_thread () =
     if not (Queue.is_empty threads) then
       return (Queue.take threads)
-    else if thread_count < max_threads then
+    else if !thread_count < !max_threads then
       return (make_thread ())
     else begin
       let (res, w) = Lwt.task () in
