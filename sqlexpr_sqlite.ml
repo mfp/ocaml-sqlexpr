@@ -328,6 +328,7 @@ end
 module IdentityPool(M: THREAD) : sig
   include POOL with type 'a result = 'a M.t
   val get_handle : db -> Sqlite3.db
+  val make : Sqlite3.db -> db
 end =
 struct
   module Lwt = M
@@ -375,14 +376,17 @@ struct
       end
     with Sqlite3.Error _ -> () (* FIXME: raise? *)
 
+  let make handle =
+    {
+      handle = handle; id = new_id (); stmts = WT.create 13;
+      thread_id = Thread.id (Thread.self ());
+      stmt_cache = Stmt_cache.create ();
+    }
+
   let open_db ?(init = fun _ -> ()) fname =
     let handle = Sqlite3.db_open fname in
       init handle;
-      {
-        handle = handle; id = new_id (); stmts = WT.create 13;
-        thread_id = Thread.id (Thread.self ());
-        stmt_cache = Stmt_cache.create ();
-      }
+      make handle
 
   let raise_error db ?sql ?params ?(errmsg = Sqlite3.errmsg db) errcode =
     let msg = Sqlite3.Rc.to_string errcode ^ " " ^ errmsg in
@@ -743,5 +747,6 @@ end
 module Make(M : THREAD) = struct
   module Id = IdentityPool(M)
   include Make_gen(M)(Id)
+  let make = Id.make
   let sqlite_db db = Id.get_handle db
 end

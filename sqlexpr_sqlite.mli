@@ -173,6 +173,8 @@ module Make : functor (M : Sqlexpr_concurrency.THREAD) ->
 sig
   include S with type 'a result = 'a M.t
 
+  val make : Sqlite3.db -> db
+
   (** Return the [Sqlite3.db] handle from a [db]. *)
   val sqlite_db : db -> Sqlite3.db
 end
