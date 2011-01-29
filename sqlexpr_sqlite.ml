@@ -325,11 +325,22 @@ sig
   val borrow_worker : db -> (db -> 'a result) -> 'a result
 end
 
-module IdentityPool(M: THREAD) : sig
-  include POOL with type 'a result = 'a M.t
-  val get_handle : db -> Sqlite3.db
-  val make : Sqlite3.db -> db
-end =
+module WT = Weak.Make(struct
+                        type t = Stmt.t
+                        let hash = Hashtbl.hash
+                        let equal = (==)
+                      end)
+
+type single_worker_db =
+{
+  handle : Sqlite3.db;
+  thread_id : int;
+  id : int;
+  stmts : WT.t;
+  stmt_cache : Stmt_cache.t;
+}
+
+module IdentityPool(M: THREAD) =
 struct
   module Lwt = M
   open Lwt
@@ -337,21 +348,7 @@ struct
   include Profile(M)
   include Error(M)
 
-  module WT = Weak.Make(struct
-                          type t = Stmt.t
-                          let hash = Hashtbl.hash
-                          let equal = (==)
-                        end)
-
-  type db =
-  {
-    handle : Sqlite3.db;
-    thread_id : int;
-    id : int;
-    stmts : WT.t;
-    stmt_cache : Stmt_cache.t;
-  }
-
+  type db = single_worker_db
   type stmt = Stmt.t
   type 'a result = 'a Lwt.t
 

@@ -169,9 +169,12 @@ sig
   end
 end
 
+(** [db] type shared by single-worker ("identity pool") {!S} implementations. *)
+type single_worker_db
+
 module Make : functor (M : Sqlexpr_concurrency.THREAD) ->
 sig
-  include S with type 'a result = 'a M.t
+  include S with type 'a result = 'a M.t and type db = single_worker_db
 
   val make : Sqlite3.db -> db
 
