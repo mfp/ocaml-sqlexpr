@@ -35,7 +35,7 @@ Library sqlexpr
   Modules:          Sqlexpr_concurrency,
                     Sqlexpr_sqlite,
                     Sqlexpr_sqlite_lwt
-  BuildDepends:     csv, batteries, sqlite3, estring, lwt, lwt.syntax, lwt.unix,
+  BuildDepends:     csv, batteries, sqlite3, estring, lwt (>= 2.2.0), lwt.syntax, lwt.unix,
                     unix, threads
   XMETADescription: SQLite database access.
 
