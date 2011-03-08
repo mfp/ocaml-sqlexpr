@@ -325,6 +325,7 @@ sig
     Sqlite3.Rc.t -> 'a result
   val unsafe_execute : db -> string -> unit result
   val borrow_worker : db -> (db -> 'a result) -> 'a result
+  val steal_worker : db -> (db -> 'a result) -> 'a result
 end
 
 module WT = Weak.Make(struct
@@ -375,12 +376,23 @@ struct
       end
     with Sqlite3.Error _ -> () (* FIXME: raise? *)
 
+  let mutex_tbl = Hashtbl.create 13
+
+  let try_find_mutex db =
+    try Some (Hashtbl.find mutex_tbl db.id) with Not_found -> None
+
   let make handle =
-    {
-      handle = handle; id = new_id (); stmts = WT.create 13;
-      thread_id = Thread.id (Thread.self ());
-      stmt_cache = Stmt_cache.create ();
-    }
+    let id = new_id () in
+    let t =
+      {
+        handle = handle; id = id; stmts = WT.create 13;
+        thread_id = Thread.id (Thread.self ());
+        stmt_cache = Stmt_cache.create ();
+      }
+    in
+      Hashtbl.add mutex_tbl id (M.create_recursive_mutex ());
+      Gc.finalise (fun _ -> Hashtbl.remove mutex_tbl id) t;
+      t
 
   let open_db ?(init = fun _ -> ()) fname =
     let handle = Sqlite3.db_open fname in
@@ -460,6 +472,14 @@ struct
                | None -> return ())
 
   let borrow_worker db f = f db
+
+  let steal_worker db f =
+    match try_find_mutex db with
+        None -> (* shouldn't happen as long as the db is alive *)
+          failwithfmt
+            "Sqlexpr_sqlite (steal_worker): could not find mutex for db %d" db.id
+      | Some m ->
+          M.with_lock m (fun () -> f db)
 
   let step ?sql ?params stmt =
     run ?sql ?params ~stmt (Stmt.db_handle stmt) Stmt.step stmt
@@ -694,15 +714,17 @@ struct
 
   let transaction db f =
     let txid = new_tx_id () in
-      unsafe_execute db "SAVEPOINT %s" txid >>
-      try_lwt
-        lwt x = f db in
-          unsafe_execute_prof "RELEASE" db "RELEASE %s" txid >>
-          return x
-      with e ->
-        unsafe_execute_prof "ROLLBACK" db "ROLLBACK TO %s" txid >>
-        unsafe_execute db "RELEASE %s" txid >>
-        fail e
+      POOL.steal_worker db
+        (fun db ->
+           unsafe_execute db "SAVEPOINT %s" txid >>
+           try_lwt
+             lwt x = f db in
+               unsafe_execute_prof "RELEASE" db "RELEASE %s" txid >>
+               return x
+           with e ->
+             unsafe_execute_prof "ROLLBACK" db "ROLLBACK TO %s" txid >>
+             unsafe_execute db "RELEASE %s" txid >>
+             fail e)
 
   let fold db f init expr =
     do_select

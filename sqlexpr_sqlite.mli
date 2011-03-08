@@ -202,6 +202,7 @@ sig
     Sqlite3.Rc.t -> 'a result
   val unsafe_execute : db -> string -> unit result
   val borrow_worker : db -> (db -> 'a result) -> 'a result
+  val steal_worker : db -> (db -> 'a result) -> 'a result
 end
 
 module Make_gen :

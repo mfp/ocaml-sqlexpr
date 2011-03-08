@@ -1,6 +1,18 @@
 
 open Printf
 open OUnit
+open Lwt
+
+let aeq_int = assert_equal ~printer:(sprintf "%d")
+let aeq_str = assert_equal ~printer:(sprintf "%S")
+let aeq_float = assert_equal ~printer:(sprintf "%f")
+let aeq_int32 = assert_equal ~printer:(sprintf "%ld")
+let aeq_int64 = assert_equal ~printer:(sprintf "%Ld")
+let aeq_bool = assert_equal ~printer:string_of_bool
+
+let aeq_list ~printer =
+  assert_equal
+    ~printer:(fun l -> "[ " ^ String.concat "; " (List.map printer l) ^ " ]")
 
 module Test
   (Lwt : sig
@@ -16,17 +28,6 @@ struct
   module S = Sqlexpr
 
   let (>|=) f g = bind f (fun x -> return (g x))
-
-  let aeq_int = assert_equal ~printer:(sprintf "%d")
-  let aeq_str = assert_equal ~printer:(sprintf "%S")
-  let aeq_float = assert_equal ~printer:(sprintf "%f")
-  let aeq_int32 = assert_equal ~printer:(sprintf "%ld")
-  let aeq_int64 = assert_equal ~printer:(sprintf "%Ld")
-  let aeq_bool = assert_equal ~printer:string_of_bool
-
-  let aeq_list ~printer =
-    assert_equal
-      ~printer:(fun l -> "[ " ^ String.concat "; " (List.map printer l) ^ " ]")
 
   (* schema changes to :memory: db made by a Sqlexpr_sqlite_lwt worker are not
    * seen by the others, so allow to use a file by doing ~in_mem:false *)
@@ -160,31 +161,31 @@ struct
   let test_transaction () =
     with_db begin fun db () ->
       let s_of_pair (id, data) = sprintf "(%d, %S)" id data in
-      let get_rows () = S.select db sql"SELECT @d{id}, @s{data} FROM foo ORDER BY id" in
-      let get_one () = S.select_one db sql"SELECT @d{id}, @s{data} FROM foo ORDER BY id" in
-      let get_one' () = S.select_one db sqlc"SELECT @d{id}, @s{data} FROM foo ORDER BY id" in
-      let insert = S.execute db sql"INSERT INTO foo(id, data) VALUES(%d, %s)" in
+      let get_rows db = S.select db sql"SELECT @d{id}, @s{data} FROM foo ORDER BY id" in
+      let get_one db = S.select_one db sql"SELECT @d{id}, @s{data} FROM foo ORDER BY id" in
+      let get_one' db = S.select_one db sqlc"SELECT @d{id}, @s{data} FROM foo ORDER BY id" in
+      let insert db = S.execute db sql"INSERT INTO foo(id, data) VALUES(%d, %s)" in
       let aeq = aeq_list ~printer:s_of_pair in
       let aeq_one = assert_equal ~printer:s_of_pair in
         S.execute db sql"CREATE TABLE foo(id INTEGER NOT NULL, data TEXT NOT NULL)" >>
-        get_rows () >|= aeq ~msg:"Init" [] >>
+        get_rows db >|= aeq ~msg:"Init" [] >>
         S.transaction db
-          (fun _ ->
-             get_rows () >|= aeq [] >>
-             insert 1 "foo" >>
-             get_rows () >|= aeq ~msg:"One insert in TX" [1, "foo"] >>
-             get_one () >|= aeq_one ~msg:"select_one after 1 insert in TX" (1, "foo") >>
-             get_one' () >|= aeq_one ~msg:"select_one (cached) after 1 insert in TX"
+          (fun db ->
+             get_rows db >|= aeq [] >>
+             insert db 1 "foo" >>
+             get_rows db >|= aeq ~msg:"One insert in TX" [1, "foo"] >>
+             get_one db >|= aeq_one ~msg:"select_one after 1 insert in TX" (1, "foo") >>
+             get_one' db >|= aeq_one ~msg:"select_one (cached) after 1 insert in TX"
                                (1, "foo") >>
              try_lwt
                S.transaction db
-                 (fun _ ->
-                    insert 2 "bar" >>
-                    get_rows () >|= aeq ~msg:"Insert in nested TX" [1, "foo"; 2, "bar";] >>
+                 (fun db ->
+                    insert db 2 "bar" >>
+                    get_rows db >|= aeq ~msg:"Insert in nested TX" [1, "foo"; 2, "bar";] >>
                     fail Cancel)
              with Cancel ->
-               get_rows () >|= aeq ~msg:"After nested TX is canceled" [1, "foo"]) >>
-        get_rows () >|= aeq [1, "foo"];
+               get_rows db >|= aeq ~msg:"After nested TX is canceled" [1, "foo"]) >>
+        get_rows db >|= aeq [1, "foo"];
     end ()
 
   let test_fold_and_iter () =
@@ -279,6 +280,20 @@ struct
     ]
 end
 
+let test_lwt_recursive_mutex () =
+  let module M = Sqlexpr_concurrency.Lwt in
+  let mv = Lwt_mvar.create () in
+  let m = M.create_recursive_mutex () in
+  let l = ref [] in
+  let push x = l := x :: !l; return () in
+  lwt n = M.with_lock m (fun () -> M.with_lock m (fun () -> return 42)) in
+    aeq_int 42 n;
+    let t1 = M.with_lock m (fun () -> push 1 >> Lwt_mvar.take mv >> push 2) in
+    let t2 = M.with_lock m (fun () -> push 3) in
+    lwt () = Lwt.join [ t1; t2; Lwt_mvar.put mv () ] in
+      aeq_list ~printer:string_of_int [3; 2; 1] !l;
+      return ()
+
 module IdConc =
 struct
   include Sqlexpr_concurrency.Id
@@ -288,15 +303,16 @@ end
 
 module LwtConc =
 struct
-  include Lwt
-  let auto_yield = Lwt_unix.auto_yield
-  let sleep = Lwt_unix.sleep
+  include Sqlexpr_concurrency.Lwt
   let run x = Lwt_unix.run (Lwt.pick [x; Lwt_unix.timeout 1.0])
   let iter = Lwt_list.iter_s
 end
 
+let lwt_run f () = LwtConc.run (f ())
+
 let all_tests =
   [
+    "Sqlexpr_concurrency.Lwt.with_lock" >:: lwt_run test_lwt_recursive_mutex;
     (let module M = Test(IdConc)(Sqlexpr_sqlite.Make(IdConc)) in
       "Sqlexpr_sqlite.Make(Sqlexpr_concurrency.Id)" >::: M.all_tests false);
     (let module M = Test(LwtConc)(Sqlexpr_sqlite.Make(LwtConc)) in

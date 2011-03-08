@@ -2,14 +2,9 @@ open Printf
 open Sqlexpr_sqlite
 open Lwt
 
-let failwithfmt fmt = ksprintf (fun s -> try_lwt failwith s) fmt
+module CONC = Sqlexpr_concurrency.Lwt
 
-module CONC =
-struct
-  include Lwt
-  let auto_yield = Lwt_unix.auto_yield
-  let sleep = Lwt_unix.sleep
-end
+let failwithfmt fmt = ksprintf (fun s -> try_lwt failwith s) fmt
 
 (* Total number of threads currently running: *)
 let thread_count = ref 0
@@ -362,6 +357,18 @@ struct
       finally
         db'.workers <- [];
         close_db db';
+        return ()
+
+  let steal_worker db f =
+    let db' = { open_db ~init:db.init_func db.file with max_workers = 1 } in
+    lwt worker = get_worker db in
+      add_worker db' { worker with db = db' } ;
+      try_lwt
+        f db'
+      finally
+        db'.workers <- [];
+        close_db db';
+        add_worker db worker;
         return ()
 
   let step ?sql ?params (worker, stmt) =
