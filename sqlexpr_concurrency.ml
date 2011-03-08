@@ -1,5 +1,3 @@
-(** Concurrency monad. *)
-
 module type THREAD =
 sig
   type 'a t
