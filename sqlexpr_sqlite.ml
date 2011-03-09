@@ -378,21 +378,25 @@ struct
 
   let mutex_tbl = Hashtbl.create 13
 
-  let try_find_mutex db =
-    try Some (Hashtbl.find mutex_tbl db.id) with Not_found -> None
+  let get_db_mutex db =
+    (* different modules having the same  type db = single_worker_db will have
+     * different mutex_tbl tables, so must create the mutex lazily *)
+    let id = db.id in
+      try
+        Hashtbl.find mutex_tbl id
+      with Not_found ->
+        let m = M.create_recursive_mutex () in
+          Hashtbl.add mutex_tbl id m;
+          Gc.finalise (fun _ -> Hashtbl.remove mutex_tbl id) db;
+          m
 
   let make handle =
     let id = new_id () in
-    let t =
       {
         handle = handle; id = id; stmts = WT.create 13;
         thread_id = Thread.id (Thread.self ());
         stmt_cache = Stmt_cache.create ();
       }
-    in
-      Hashtbl.add mutex_tbl id (M.create_recursive_mutex ());
-      Gc.finalise (fun _ -> Hashtbl.remove mutex_tbl id) t;
-      t
 
   let open_db ?(init = fun _ -> ()) fname =
     let handle = Sqlite3.db_open fname in
@@ -473,13 +477,7 @@ struct
 
   let borrow_worker db f = f db
 
-  let steal_worker db f =
-    match try_find_mutex db with
-        None -> (* shouldn't happen as long as the db is alive *)
-          failwithfmt
-            "Sqlexpr_sqlite (steal_worker): could not find mutex for db %d" db.id
-      | Some m ->
-          M.with_lock m (fun () -> f db)
+  let steal_worker db f = M.with_lock (get_db_mutex db) (fun () -> f db)
 
   let step ?sql ?params stmt =
     run ?sql ?params ~stmt (Stmt.db_handle stmt) Stmt.step stmt
