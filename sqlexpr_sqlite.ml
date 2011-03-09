@@ -523,6 +523,7 @@ sig
   val open_db : ?init:(Sqlite3.db -> unit) -> string -> db
   val close_db : db -> unit
   val borrow_worker : db -> (db -> 'a result) -> 'a result
+  val steal_worker : db -> (db -> 'a result) -> 'a result
   val execute : db -> ('a, unit result) statement -> 'a
   val insert : db -> ('a, int64 result) statement -> 'a
   val select : db -> ('c, 'a, 'a list result) expression -> 'c
@@ -617,6 +618,7 @@ struct
   let close_db = POOL.close_db
 
   let borrow_worker = POOL.borrow_worker
+  let steal_worker = POOL.steal_worker
 
   let do_select f db p =
     p.directive (POOL.prepare db f) ([], 0, p.sql_statement, p.stmt_id)

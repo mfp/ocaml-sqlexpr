@@ -70,6 +70,11 @@ sig
     * invalidated automatically. *)
   val borrow_worker : db -> (db -> 'a result) -> 'a result
 
+  (** [steal_worker db f] is similar to [borrow_worker db f], but ensures
+    * that [f] is given exclusive access to the worker while it is being
+    * evaluated. *)
+  val steal_worker : db -> (db -> 'a result) -> 'a result
+
   (** Execute a SQL statement. *)
   val execute : db -> ('a, unit result) statement -> 'a
 
@@ -111,7 +116,18 @@ sig
     ('c, 'a, 'b option result) expression -> 'c
 
   (** Run the provided function in a DB transaction. A rollback is performed
-      if an exception is raised inside the transaction. *)
+      if an exception is raised inside the transaction.
+
+      The worker is used exclusively by only one thread per instantiated module
+      (see {!steal_worker}).
+      That is, given
+        {[
+           module S1 = Sqlexpr_sqlite.Make(Sqlexpr_concurrency.Id)
+           module S2 = Sqlexpr_sqlite.Make(Sqlexpr_concurrency.Lwt)
+           let db = S1.open_db somefile
+        ]}
+        there is no exclusion between functions from [S1] and those from [S2].
+      *)
   val transaction : db -> (db -> 'a result) -> 'a result
 
   (** [fold db f a expr ...] is
