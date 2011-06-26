@@ -183,27 +183,28 @@ struct
 
   let failwithfmt fmt = ksprintf failwith fmt
 
-  let error s =
-    failwithfmt "Sqlexpr_sqlite error: bad data (expected %s)" s
+  let error s x =
+    failwithfmt "Sqlexpr_sqlite error: bad data (expected %s but got %s)"
+      s (Sqlite3.Data.to_string_debug x)
 
   let text = function
       TEXT s | BLOB s -> s
     | INT n -> Int64.to_string n
     | FLOAT f -> string_of_float f
-    | _ -> error "text"
+    | x -> error "text" x
 
-  let blob = function BLOB s | TEXT s -> s | _ -> error "blob"
+  let blob = function BLOB s | TEXT s -> s | x -> error "blob" x
 
-  let int = function INT n -> Int64.to_int n | _ -> error "int"
-  let int32 = function INT n -> Int64.to_int32 n | _ -> error "int"
-  let int64 = function INT n -> n | _ -> error "int"
+  let int = function INT n -> Int64.to_int n | x -> error "int" x
+  let int32 = function INT n -> Int64.to_int32 n | x -> error "int" x
+  let int64 = function INT n -> n | x -> error "int" x
 
-  let bool = function INT 0L -> false | INT _ -> true | _ -> error "int"
+  let bool = function INT 0L -> false | INT _ -> true | x -> error "int" x
 
   let float = function
       INT n -> Int64.to_float n
     | FLOAT n -> n
-    | _ -> error "float"
+    | x -> error "float" x
 
   let maybe f = function
       NULL -> None
