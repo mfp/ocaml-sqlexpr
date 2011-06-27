@@ -227,6 +227,12 @@ let profile_ch =
             (Unix.getenv "OCAML_SQLEXPR_PROFILE"))
   with Not_found -> None
 
+let raw_profile_ch =
+  try
+    Some (open_out_gen [Open_append; Open_creat; Open_binary] 0o644
+            (Unix.getenv "OCAML_SQLEXPR_LOG"))
+  with Not_found -> None
+
 let profile_uuid =
   let uuid =
     sprintf "%s %d %d %g %s %g"
@@ -296,6 +302,10 @@ struct
           let details =
             [ "name"; Digest.to_hex (Digest.string sql); "portal"; " " ]
           in profile_op "execute" details f
+
+  let profile_execute_sql sql ?params f =
+    Option.may (fun ch -> fprintf ch "%s\n%!" (String.escaped sql)) raw_profile_ch;
+        profile_execute_sql sql ?params f
 
   let profile_prepare_stmt sql f =
     match profile_ch with
