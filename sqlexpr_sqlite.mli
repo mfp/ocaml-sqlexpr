@@ -255,7 +255,8 @@ end
 module Profile : functor (M : Sqlexpr_concurrency.THREAD) ->
 sig
   val profile_execute_sql :
-    string -> ?params:Sqlite3.Data.t list -> (unit -> 'b M.t) -> 'b M.t
+    string -> ?full_sql:string -> ?params:Sqlite3.Data.t list ->
+    (unit -> 'b M.t) -> 'b M.t
   val profile_prepare_stmt : string -> (unit -> 'a M.t) -> 'a M.t
 end
 

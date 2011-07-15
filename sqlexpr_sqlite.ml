@@ -303,9 +303,15 @@ struct
             [ "name"; Digest.to_hex (Digest.string sql); "portal"; " " ]
           in profile_op "execute" details f
 
-  let profile_execute_sql sql ?params f =
-    Option.may (fun ch -> fprintf ch "%s\n%!" (String.escaped sql)) raw_profile_ch;
-        profile_execute_sql sql ?params f
+  let profile_execute_sql sql ?(full_sql=sql) ?params f =
+    let param_str = match params with
+        None -> ""
+      | Some l -> String.concat "\t" (List.rev_map string_of_param l)
+    in
+      Option.may
+        (fun ch -> fprintf ch "%s\t%s\n%!" (String.escaped full_sql) param_str)
+        raw_profile_ch;
+      profile_execute_sql sql ?params f
 
   let profile_prepare_stmt sql f =
     match profile_ch with
@@ -477,7 +483,7 @@ struct
       iteri
         (fun n v -> check_ok ~sql ~stmt dbh (Stmt.bind stmt (nparams - n)) v)
         params >>
-      profile_execute_sql sql ~params
+      profile_execute_sql ~full_sql:sql sql ~params
         (fun () ->
            try_lwt
              f stmt sql params
@@ -720,7 +726,7 @@ struct
     ksprintf
       (fun sql ->
          profile_prepare_stmt text (fun () -> return ()) >>
-         profile_execute_sql text (fun () -> POOL.unsafe_execute db sql))
+         profile_execute_sql ~full_sql:sql text (fun () -> POOL.unsafe_execute db sql))
       fmt
 
   let transaction db f =
