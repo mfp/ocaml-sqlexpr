@@ -740,14 +740,14 @@ struct
     let txid = new_tx_id () in
       POOL.steal_worker db
         (fun db ->
-           unsafe_execute db "SAVEPOINT %s" txid >>
+           unsafe_execute_prof "SAVEPOINT" db "SAVEPOINT %s" txid >>
            try_lwt
              lwt x = f db in
                unsafe_execute_prof "RELEASE" db "RELEASE %s" txid >>
                return x
            with e ->
              unsafe_execute_prof "ROLLBACK" db "ROLLBACK TO %s" txid >>
-             unsafe_execute db "RELEASE %s" txid >>
+             unsafe_execute_prof "RELEASE" db "RELEASE %s" txid >>
              fail e)
 
   let fold db f init expr =
