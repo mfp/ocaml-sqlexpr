@@ -7,6 +7,8 @@ module Option = BatOption
 exception Error of string * exn
 exception Sqlite_error of string * Sqlite3.Rc.t
 
+let tx_id_counter = ref 0
+
 let curr_thread_id () = Thread.id (Thread.self ())
 
 let raise_thread_error ?msg expected =
@@ -716,8 +718,13 @@ struct
 
   let new_tx_id =
     let pid = Unix.getpid () in
-    let n = ref 0 in
-      fun () -> incr n; sprintf "__sqlexpr_sqlite_tx_%d_%d" pid !n
+      fun () ->
+        (* No allocation here, so cannot have a context change until the
+         * sprintf, at least in native code. *)
+        let n = !tx_id_counter in
+          incr tx_id_counter;
+          if !tx_id_counter < 0 then tx_id_counter := 0;
+          sprintf "__sqlexpr_sqlite_tx_%d_%d" pid n
 
   let unsafe_execute db fmt =
     ksprintf (POOL.unsafe_execute db) fmt
