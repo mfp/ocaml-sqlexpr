@@ -1,5 +1,33 @@
 <**/*.ml>: syntax_camlp4o
 
 # OASIS_START
-# DO NOT EDIT (digest: d41d8cd98f00b204e9800998ecf8427e)
+# DO NOT EDIT (digest: 29b8c77cefb2e97362d5ec72a36f640f)
+# Ignore VCS directories, you can use the same kind of rule outside 
+# OASIS_START/STOP if you want to exclude directories that contains 
+# useless stuff for the build process
+<**/.svn>: -traverse
+<**/.svn>: not_hygienic
+".bzr": -traverse
+".bzr": not_hygienic
+".hg": -traverse
+".hg": not_hygienic
+".git": -traverse
+".git": not_hygienic
+"_darcs": -traverse
+"_darcs": not_hygienic
+# Library sqlexpr
+"sqlexpr.cmxs": use_sqlexpr
+<*.ml{,i}>: pkg_csv
+<*.ml{,i}>: pkg_batteries
+<*.ml{,i}>: pkg_sqlite3
+<*.ml{,i}>: pkg_lwt
+<*.ml{,i}>: pkg_lwt.syntax
+<*.ml{,i}>: pkg_lwt.unix
+<*.ml{,i}>: pkg_unix
+<*.ml{,i}>: pkg_threads
+# Library sqlexpr_syntax
+"sqlexpr_syntax.cmxs": use_sqlexpr_syntax
+<*.ml{,i}>: pkg_camlp4.lib
+<*.ml{,i}>: pkg_camlp4.quotations.r
+<*.ml{,i}>: pkg_estring
 # OASIS_STOP
