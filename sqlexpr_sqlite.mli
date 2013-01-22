@@ -118,8 +118,23 @@ sig
   (** Run the provided function in a DB transaction. A rollback is performed
       if an exception is raised inside the transaction.
 
-      The worker is used exclusively by only one thread per instantiated module
-      (see {!steal_worker}).
+      If the BEGIN or COMMIT SQL statements from the outermost transaction fail
+      with [SQLITE_BUSY], they will be retried until they can be executed.
+      A [SQLITE_BUSY] (or any other) error code in any other operation inside
+      a transaction will result in an [Error (_, Sqlite_error (code, _))]
+      exception being thrown, and a rollback performed.
+
+      One consequence of this is that concurrency control is very simple if
+      you use [`EXCLUSIVE] transactions: the code can be written
+      straightforwardly as [S.transaction db (fun db -> ...)], and their
+      execution will be serialized (across both threads and processes).
+      Note that, for [`IMMEDIATE] and [`DEFERRED] transactions, you will
+      have to retry manually if an
+      [Error (_, Sqlite_error (Sqlite3.Rc.Busy, _))] is raised.
+
+      All SQL operations performed within a transaction will use the same
+      worker.  This worker is used exclusively by only one thread per
+      instantiated module (see {!steal_worker}).
       That is, given
         {[
            module S1 = Sqlexpr_sqlite.Make(Sqlexpr_concurrency.Id)
@@ -224,7 +239,7 @@ sig
   val raise_error :
     stmt -> ?sql:string -> ?params:Sqlite3.Data.t list -> ?errmsg:string ->
     Sqlite3.Rc.t -> 'a result
-  val unsafe_execute : db -> string -> unit result
+  val unsafe_execute : db -> ?retry_on_busy:bool -> string -> unit result
   val borrow_worker : db -> (db -> 'a result) -> 'a result
   val steal_worker : db -> (db -> 'a result) -> 'a result
 

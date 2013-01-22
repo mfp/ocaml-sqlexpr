@@ -345,7 +345,8 @@ sig
   val raise_error :
     stmt -> ?sql:string -> ?params:Sqlite3.Data.t list -> ?errmsg:string ->
     Sqlite3.Rc.t -> 'a result
-  val unsafe_execute : db -> string -> unit result
+
+  val unsafe_execute : db -> ?retry_on_busy:bool -> string -> unit result
   val borrow_worker : db -> (db -> 'a result) -> 'a result
   val steal_worker : db -> (db -> 'a result) -> 'a result
 
@@ -449,17 +450,17 @@ struct
           sprintf "%s with params %s" msg (string_of_params (List.rev params))
     in M.fail (Error (msg, Sqlite_error (msg, errcode)))
 
-  let rec run ?stmt ?sql ?params db f x = match f x with
+  let rec run ?(retry_on_busy=false) ?stmt ?sql ?params db f x = match f x with
       Sqlite3.Rc.OK | Sqlite3.Rc.ROW | Sqlite3.Rc.DONE as r -> return r
-    | Sqlite3.Rc.BUSY | Sqlite3.Rc.LOCKED ->
-        M.sleep 0.010 >> run ?sql ?stmt ?params db f x
+    | Sqlite3.Rc.BUSY when retry_on_busy ->
+        M.sleep 0.010 >> run ~retry_on_busy ?sql ?stmt ?params db f x
     | code ->
         let errmsg = Sqlite3.errmsg db in
           Option.may (fun stmt -> ignore (Stmt.reset stmt)) stmt;
           raise_error db ?sql ?params ~errmsg code
 
-  let check_ok ?stmt ?sql ?params db f x =
-    lwt _ = run ?stmt ?sql ?params db f x in return ()
+  let check_ok ?retry_on_busy ?stmt ?sql ?params db f x =
+    lwt _ = run ?retry_on_busy ?stmt ?sql ?params db f x in return ()
 
   let prepare db f (params, nparams, sql, stmt_id) =
     lwt dbh = handle db in
@@ -525,9 +526,9 @@ struct
   let reset stmt = ignore (Stmt.reset stmt); return ()
   let row_data stmt = return (Stmt.row_data stmt)
 
-  let unsafe_execute db sql =
+  let unsafe_execute db ?retry_on_busy sql =
     lwt dbh = handle db in
-      check_ok ~sql dbh (Sqlite3.exec dbh) sql
+      check_ok ?retry_on_busy ~sql dbh (Sqlite3.exec dbh) sql
 
   let raise_error stmt ?sql ?params ?errmsg errcode =
     raise_error (Stmt.db_handle stmt) ?sql ?params ?errmsg errcode
@@ -748,14 +749,14 @@ struct
           if !tx_id_counter < 0 then tx_id_counter := 0;
           sprintf "__sqlexpr_sqlite_tx_%d_%d" pid n
 
-  let unsafe_execute db fmt =
-    ksprintf (POOL.unsafe_execute db) fmt
+  let unsafe_execute db ?retry_on_busy fmt =
+    ksprintf (POOL.unsafe_execute db ?retry_on_busy) fmt
 
-  let unsafe_execute_prof text db fmt =
+  let unsafe_execute_prof text db ?retry_on_busy fmt =
     ksprintf
       (fun sql ->
          profile_prepare_stmt text (fun () -> return ()) >>
-         profile_execute_sql ~full_sql:sql text (fun () -> POOL.unsafe_execute db sql))
+         profile_execute_sql ~full_sql:sql text (fun () -> POOL.unsafe_execute db ?retry_on_busy sql))
       fmt
 
   (* wrap in BEGIN/COMMIT only for outermost txs *)
@@ -768,7 +769,7 @@ struct
             | `IMMEDIATE -> "IMMEDIATE"
             | `EXCLUSIVE -> "EXCLUSIVE"
           in
-            unsafe_execute_prof "BEGIN" db "BEGIN %s" tx_kind >>
+            unsafe_execute_prof ~retry_on_busy:true "BEGIN" db "BEGIN %s" tx_kind >>
             match_lwt
               try_lwt
                 lwt x = POOL.TLS.with_value
@@ -777,7 +778,8 @@ struct
                   return (`OK x)
               with exn -> return (`EXN exn)
             with
-              | `OK x -> unsafe_execute_prof "COMMIT" db "COMMIT" >> return x
+              | `OK x -> unsafe_execute_prof ~retry_on_busy:true
+                           "COMMIT" db "COMMIT" >> return x
               | `EXN exn -> unsafe_execute_prof "ROLLBACK" db "ROLLBACK" >> fail exn
 
   let transaction db ?(kind = `DEFERRED) f =

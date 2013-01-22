@@ -188,6 +188,30 @@ struct
         get_rows db >|= aeq [1, "foo"];
     end ()
 
+  let test_retry_begin () =
+
+    let count_rows db =
+      S.select_one db sqlc"SELECT @d{COUNT(*)} FROM foo" in
+
+    let insert v db =
+      (* SELECT acquires a SHARED lock if needed *)
+      lwt _ = count_rows db in
+        Lwt.sleep 0.010 >>
+        (* RESERVED lock acquired if needed *)
+        S.insert db sqlc"INSERT INTO foo VALUES(%d)" v in
+
+    let fname = Filename.temp_file "t_sqlexpr_sqlite_excl_retry" "" in
+    let db1   = S.open_db fname in
+    let db2   = S.open_db fname in
+
+      S.execute db1 sqlc"CREATE TABLE foo(id INTEGER PRIMARY KEY)" >>
+      (* these 2 TXs are serialized because they are EXCLUSIVE *)
+      lwt _   = S.transaction ~kind:`EXCLUSIVE db1 (insert 1)
+      and _   = S.transaction ~kind:`EXCLUSIVE db2 (insert 2) in
+      lwt n   = count_rows db1 in
+        aeq_int ~msg:"number of rows inserted" 2 n;
+        return ()
+
   let test_fold_and_iter () =
     with_db begin fun db () ->
       S.execute db sql"CREATE TABLE foo(n INTEGER NOT NULL)" >>
@@ -274,6 +298,7 @@ struct
       "Outputs" >::: test_outputs;
       "Directives in output exprs" >:: test_oexpr_directives;
       "Transactions" >:: test_transaction;
+      "Auto-retry BEGIN" >:: test_retry_begin;
       "Fold and iter" >:: test_fold_and_iter;
       "Nested fold and iter" >:: test_nested_iter_and_fold;
       "Borrow worker" >:: test_borrow_worker has_real_borrow_worker;

@@ -267,10 +267,11 @@ struct
       | None -> detach worker (fun dbh () -> Sqlite3.errmsg dbh) ()
     in try_lwt return (do_raise_error ?sql ?params ~errmsg errcode)
 
-  let rec run ?stmt ?sql ?params worker f x = detach worker f x >>= function
+  let rec run ?(retry_on_busy = false) ?stmt ?sql ?params worker f x =
+    detach worker f x >>= function
       Sqlite3.Rc.OK | Sqlite3.Rc.ROW | Sqlite3.Rc.DONE as r -> return r
-    | Sqlite3.Rc.BUSY | Sqlite3.Rc.LOCKED ->
-        Lwt_unix.sleep 0.010 >> run ?sql ?stmt ?params worker f x
+    | Sqlite3.Rc.BUSY when retry_on_busy ->
+        Lwt_unix.sleep 0.010 >> run ~retry_on_busy ?sql ?stmt ?params worker f x
     | code ->
         lwt errmsg = detach worker (fun dbh () -> Sqlite3.errmsg dbh) () in
         begin match stmt with
@@ -279,8 +280,8 @@ struct
         end >>
         raise_error worker ?sql ?params ~errmsg code
 
-  let check_ok ?stmt ?sql ?params worker f x =
-    lwt _ = run ?stmt ?sql ?params worker f x in return ()
+  let check_ok ?retry_on_busy ?stmt ?sql ?params worker f x =
+    lwt _ = run ?retry_on_busy ?stmt ?sql ?params worker f x in return ()
 
   (* Wait for worker to be available, then return it: *)
   let rec get_worker db =
@@ -397,10 +398,10 @@ struct
 
   let row_data (worker, stmt) = detach worker (fun _ -> Stmt.row_data) stmt
 
-  let unsafe_execute db sql =
+  let unsafe_execute db ?retry_on_busy sql =
     lwt worker = get_worker db in
       try_lwt
-        check_ok ~sql worker (fun dbh sql -> Sqlite3.exec dbh sql) sql
+        check_ok ?retry_on_busy ~sql worker (fun dbh sql -> Sqlite3.exec dbh sql) sql
       finally
         add_worker db worker;
         return ()
