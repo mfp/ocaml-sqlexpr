@@ -127,8 +127,13 @@ sig
            let db = S1.open_db somefile
         ]}
         there is no exclusion between functions from [S1] and those from [S2].
+
+      @param kind transaction kind, only meaningful for outermost transaction
+             (default [`DEFERRED])
       *)
-  val transaction : db -> (db -> 'a result) -> 'a result
+  val transaction :
+    db -> ?kind:[`DEFERRED | `IMMEDIATE | `EXCLUSIVE] ->
+    (db -> 'a result) -> 'a result
 
   (** [fold db f a expr ...] is
       [f (... (f (f a r1) r2) ...) rN]
@@ -201,6 +206,9 @@ end
 module type POOL =
 sig
   type 'a result
+
+  module TLS : Sqlexpr_concurrency.THREAD_LOCAL_STATE with type 'a t := 'a result
+
   type db
   type stmt
   val open_db : ?init:(Sqlite3.db -> unit) -> string -> db
@@ -219,6 +227,8 @@ sig
   val unsafe_execute : db -> string -> unit result
   val borrow_worker : db -> (db -> 'a result) -> 'a result
   val steal_worker : db -> (db -> 'a result) -> 'a result
+
+  val transaction_key : db -> unit TLS.key
 end
 
 module Make_gen :

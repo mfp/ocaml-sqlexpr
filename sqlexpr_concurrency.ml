@@ -1,3 +1,13 @@
+
+module type THREAD_LOCAL_STATE =
+sig
+  type 'a t
+  type 'a key
+  val new_key : unit -> 'a key
+  val get : 'a key -> 'a option
+  val with_value : 'a key -> 'a option -> (unit -> 'b t) -> 'b t
+end
+
 module type THREAD =
 sig
   type 'a t
@@ -13,6 +23,8 @@ sig
 
   val create_recursive_mutex : unit -> mutex
   val with_lock : mutex -> (unit -> 'a t) -> 'a t
+
+  include THREAD_LOCAL_STATE with type 'a t := 'a t
 end
 
 module Id =
@@ -36,6 +48,23 @@ struct
   type mutex = unit
   let create_recursive_mutex () = ()
   let with_lock () f = f ()
+
+  type 'a key = 'a option ref
+
+  let new_key () = ref None
+
+  let get k = !k
+
+  let with_value k v f =
+    let prev = !k in
+      k := v;
+      try
+        let ret = f () in
+          k := prev;
+          ret
+      with exn ->
+        k := prev;
+        raise exn
 end
 
 

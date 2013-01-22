@@ -327,6 +327,9 @@ end
 module type POOL =
 sig
   type 'a result
+
+  module TLS : Sqlexpr_concurrency.THREAD_LOCAL_STATE with type 'a t := 'a result
+
   type db
   type stmt
   val open_db : ?init:(Sqlite3.db -> unit) -> string -> db
@@ -345,6 +348,8 @@ sig
   val unsafe_execute : db -> string -> unit result
   val borrow_worker : db -> (db -> 'a result) -> 'a result
   val steal_worker : db -> (db -> 'a result) -> 'a result
+
+  val transaction_key : db -> unit TLS.key
 end
 
 module WT = Weak.Make(struct
@@ -375,6 +380,17 @@ struct
   type 'a result = 'a Lwt.t
 
   let get_handle db = db.handle
+
+  let transaction_key =
+    let t = Hashtbl.create 13 in
+      (fun db ->
+         try
+           Hashtbl.find t db.id
+         with Not_found ->
+           let k = M.new_key () in
+             Hashtbl.add t db.id k;
+             Gc.finalise (fun db -> Hashtbl.remove t db.id) db;
+             k)
 
   let handle db =
     if db.thread_id <> curr_thread_id () then
@@ -515,6 +531,8 @@ struct
 
   let raise_error stmt ?sql ?params ?errmsg errcode =
     raise_error (Stmt.db_handle stmt) ?sql ?params ?errmsg errcode
+
+  module TLS = M
 end
 
 module type S =
@@ -552,7 +570,11 @@ sig
   val select_one_f : db -> ('a -> 'b result) -> ('c, 'a, 'b result) expression -> 'c
   val select_one_f_maybe : db -> ('a -> 'b result) ->
     ('c, 'a, 'b option result) expression -> 'c
-  val transaction : db -> (db -> 'a result) -> 'a result
+
+  val transaction :
+    db -> ?kind:[`DEFERRED | `IMMEDIATE | `EXCLUSIVE] ->
+    (db -> 'a result) -> 'a result
+
   val fold :
     db -> ('a -> 'b -> 'a result) -> 'a -> ('c, 'b, 'a result) expression -> 'c
   val iter : db -> ('a -> unit result) -> ('b, 'a, unit result) expression -> 'b
@@ -736,10 +758,32 @@ struct
          profile_execute_sql ~full_sql:sql text (fun () -> POOL.unsafe_execute db sql))
       fmt
 
-  let transaction db f =
+  (* wrap in BEGIN/COMMIT only for outermost txs *)
+  let outer_transaction_wrap ~kind f db =
+    match POOL.TLS.get (POOL.transaction_key db) with
+        Some _ -> f db
+      | None ->
+          let tx_kind = match kind with
+              `DEFERRED -> "DEFERRED"
+            | `IMMEDIATE -> "IMMEDIATE"
+            | `EXCLUSIVE -> "EXCLUSIVE"
+          in
+            unsafe_execute_prof "BEGIN" db "BEGIN %s" tx_kind >>
+            match_lwt
+              try_lwt
+                lwt x = POOL.TLS.with_value
+                          (POOL.transaction_key db) (Some ()) (fun () -> f db)
+                in
+                  return (`OK x)
+              with exn -> return (`EXN exn)
+            with
+              | `OK x -> unsafe_execute_prof "COMMIT" db "COMMIT" >> return x
+              | `EXN exn -> unsafe_execute_prof "ROLLBACK" db "ROLLBACK" >> fail exn
+
+  let transaction db ?(kind = `DEFERRED) f =
     let txid = new_tx_id () in
       POOL.steal_worker db
-        (fun db ->
+        (outer_transaction_wrap ~kind begin fun db ->
            unsafe_execute_prof "SAVEPOINT" db "SAVEPOINT %s" txid >>
            try_lwt
              lwt x = f db in
@@ -748,7 +792,8 @@ struct
            with e ->
              unsafe_execute_prof "ROLLBACK" db "ROLLBACK TO %s" txid >>
              unsafe_execute_prof "RELEASE" db "RELEASE %s" txid >>
-             fail e)
+             fail e
+         end)
 
   let fold db f init expr =
     do_select

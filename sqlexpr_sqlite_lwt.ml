@@ -34,6 +34,7 @@ struct
       mutable workers : worker list;
       free_workers : WSet.t;
       db_waiters : worker Lwt.u Lwt_sequence.t;
+      tx_key : unit Lwt.key;
     }
 
     and thread = {
@@ -84,6 +85,8 @@ struct
   type stmt = worker * Stmt.t
   type 'a result = 'a Lwt.t
 
+  module TLS = Lwt
+
   (* Pool of threads: *)
   let threads : thread Queue.t = Queue.create ()
 
@@ -115,6 +118,8 @@ struct
     let n = ref 0 in
       fun () -> incr n; !n
 
+  let transaction_key db = db.tx_key
+
   let open_db ?(init = fun _ -> ()) file =
     let id = new_id () in
     let r =
@@ -124,6 +129,7 @@ struct
         free_workers = WSet.create ();
         db_waiters = Lwt_sequence.create ();
         db_finished = false;
+        tx_key = Lwt.new_key ();
       }
     in
       Gc.finalise close_db r;
@@ -348,7 +354,10 @@ struct
                | None -> return ())
 
   let borrow_worker db f =
-    let db' = { open_db ~init:db.init_func db.file with max_workers = 1 } in
+    let db' =
+      { open_db ~init:db.init_func db.file with max_workers = 1;
+                                                tx_key = db.tx_key;
+      } in
     lwt worker = get_worker db in
       add_worker db' { worker with db = db' } ;
       add_worker db worker;
@@ -360,7 +369,10 @@ struct
         return ()
 
   let steal_worker db f =
-    let db' = { open_db ~init:db.init_func db.file with max_workers = 1 } in
+    let db' =
+      { open_db ~init:db.init_func db.file with max_workers = 1;
+                                                tx_key = db.tx_key;
+      } in
     lwt worker = get_worker db in
       add_worker db' { worker with db = db' } ;
       try_lwt

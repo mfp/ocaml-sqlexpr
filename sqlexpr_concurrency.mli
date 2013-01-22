@@ -1,5 +1,15 @@
 (** Concurrency monad. *)
 
+(** Thread local state. *)
+module type THREAD_LOCAL_STATE =
+sig
+  type 'a t
+  type 'a key
+  val new_key : unit -> 'a key
+  val get : 'a key -> 'a option
+  val with_value : 'a key -> 'a option -> (unit -> 'b t) -> 'b t
+end
+
 (** The THREAD monad. *)
 module type THREAD =
 sig
@@ -23,6 +33,8 @@ sig
   (* [with_lock m f] blocks until the [m] mutex can be locked, runs [f ()] and
    * unlocks the mutex (also if [f ()] raises an exception) *)
   val with_lock : mutex -> (unit -> 'a t) -> 'a t
+
+  include THREAD_LOCAL_STATE with type 'a t := 'a t
 end
 
 (** Identity concurrency monad. Note that [Id.mutex] is a dummy type that
