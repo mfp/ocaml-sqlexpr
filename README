@@ -33,6 +33,12 @@ Sqlexpr is used as follows:
 
 See also example.ml.
 
+Dependencies
+============
+
+csv, batteries, sqlite3, estring, lwt (>= 2.2.0), lwt.syntax, lwt.unix,
+unix, threads, safe-finaliser (https://github.com/mfp/safe-finaliser/)
+
 Syntax extension
 ================
 

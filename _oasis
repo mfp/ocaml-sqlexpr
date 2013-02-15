@@ -1,6 +1,6 @@
 OASISFormat: 0.2
 Name:        ocaml-sqlexpr
-Version:     0.5.0
+Version:     0.5.1
 Synopsis:    Type-safe, convenient SQLite database access.
 Authors:     Mauricio Fernandez <mfp@acm.org>
 License:     LGPL-2.1 with OCaml linking exception
@@ -36,7 +36,7 @@ Library sqlexpr
                     Sqlexpr_sqlite,
                     Sqlexpr_sqlite_lwt
   BuildDepends:     csv, batteries, sqlite3, estring, lwt (>= 2.2.0), lwt.syntax, lwt.unix,
-                    unix, threads
+                    unix, threads, safe-finaliser
   XMETADescription: SQLite database access.
 
 Library "sqlexpr_syntax"

@@ -132,7 +132,8 @@ struct
         tx_key = Lwt.new_key ();
       }
     in
-      Gc.finalise close_db r;
+      Safe_finaliser.finalise_in_main_thread
+        (fun db -> close_db db; return ()) r;
       r
 
   let rec thread_loop thread =

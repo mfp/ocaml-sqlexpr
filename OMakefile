@@ -2,7 +2,7 @@ NATIVE_ENABLED = true
 BYTE_ENABLED = true
 
 USE_OCAMLFIND = true
-OCAMLPACKS[] = csv batteries sqlite3 estring lwt lwt.unix lwt.syntax threads
+OCAMLPACKS[] = csv batteries sqlite3 estring lwt lwt.unix lwt.syntax safe-finaliser threads
 OCAMLFINDFLAGS = -syntax camlp4o
 OCAMLFLAGS += -thread
 
