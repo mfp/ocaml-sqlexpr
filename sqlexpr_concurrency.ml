@@ -24,6 +24,8 @@ sig
   val create_recursive_mutex : unit -> mutex
   val with_lock : mutex -> (unit -> 'a t) -> 'a t
 
+  val register_finaliser : ('a -> unit t) -> 'a -> unit
+
   include THREAD_LOCAL_STATE with type 'a t := 'a t
 end
 
@@ -65,6 +67,10 @@ struct
       with exn ->
         k := prev;
         raise exn
+
+  let register_finaliser f x =
+    (* FIXME: should run finalisers sequentially in separate thread *)
+    Gc.finalise f x
 end
 
 
@@ -96,4 +102,6 @@ struct
       | Some s ->
           Lwt_mutex.with_lock m.m
             (fun () -> Lwt.with_value locks (Some (LOCKS.add m.id s)) f)
+
+  let register_finaliser = Lwt_gc.finalise
 end

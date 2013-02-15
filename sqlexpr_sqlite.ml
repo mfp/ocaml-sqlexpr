@@ -390,7 +390,7 @@ struct
          with Not_found ->
            let k = M.new_key () in
              Hashtbl.add t db.id k;
-             Gc.finalise (fun db -> Hashtbl.remove t db.id) db;
+             register_finaliser (fun db -> Hashtbl.remove t db.id; return ()) db;
              k)
 
   let handle db =
@@ -423,7 +423,8 @@ struct
       with Not_found ->
         let m = M.create_recursive_mutex () in
           Hashtbl.add mutex_tbl id m;
-          Gc.finalise (fun _ -> Hashtbl.remove mutex_tbl id) db;
+          M.register_finaliser
+            (fun _ -> Hashtbl.remove mutex_tbl id; return ()) db;
           m
 
   let make handle =

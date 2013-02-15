@@ -34,6 +34,8 @@ sig
    * unlocks the mutex (also if [f ()] raises an exception) *)
   val with_lock : mutex -> (unit -> 'a t) -> 'a t
 
+  val register_finaliser : ('a -> unit t) -> 'a -> unit
+
   include THREAD_LOCAL_STATE with type 'a t := 'a t
 end
 
