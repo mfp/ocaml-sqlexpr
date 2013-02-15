@@ -1,6 +1,6 @@
 OASISFormat: 0.2
 Name:        ocaml-sqlexpr
-Version:     0.5.1
+Version:     0.5.2
 Synopsis:    Type-safe, convenient SQLite database access.
 Authors:     Mauricio Fernandez <mfp@acm.org>
 License:     LGPL-2.1 with OCaml linking exception
