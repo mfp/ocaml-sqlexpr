@@ -368,7 +368,9 @@ type single_worker_db =
   stmt_cache : Stmt_cache.t;
 }
 
-module IdentityPool(M: THREAD) =
+let identity_pool_transaction_key_table = Hashtbl.create 13
+
+module IdentityPool(M: THREAD with type 'a key = 'a Lwt.key) =
 struct
   module Lwt = M
   open Lwt
@@ -383,7 +385,7 @@ struct
   let get_handle db = db.handle
 
   let transaction_key =
-    let t = Hashtbl.create 13 in
+    let t = identity_pool_transaction_key_table in
       (fun db ->
          try
            Hashtbl.find t db.id
@@ -837,7 +839,7 @@ struct
       expr.statement
 end
 
-module Make(M : THREAD) = struct
+module Make(M : THREAD with type 'a key = 'a Lwt.key) = struct
   module Id = IdentityPool(M)
   include Make_gen(M)(Id)
   let make = Id.make

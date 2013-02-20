@@ -41,11 +41,11 @@ end
 
 (** Identity concurrency monad. Note that [Id.mutex] is a dummy type that
   * doesn't actually work like a mutex (i.e., [Id.with_lock m f] is equivalent
-  * to [f ()]. This is so because n ocaml-sqlexpr's context [Sqlite] handles
+  * to [f ()]. This is so because in ocaml-sqlexpr's context [Sqlite] handles
   * can only be used from the thread where they were created, so there's no
   * need for mutual exclusion because trying to use the same handle from
   * different threads would be an error anyway. *)
-module Id : THREAD with type 'a t = 'a
+module Id : THREAD with type 'a t = 'a and type 'a key = 'a Lwt.key
 
 (** Lwt concurrency monad. *)
-module Lwt : THREAD with type 'a t = 'a Lwt.t
+module Lwt : THREAD with type 'a t = 'a Lwt.t and type 'a key = 'a Lwt.key

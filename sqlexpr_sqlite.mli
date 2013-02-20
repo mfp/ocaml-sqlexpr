@@ -208,7 +208,7 @@ end
 (** [db] type shared by single-worker ("identity pool") {!S} implementations. *)
 type single_worker_db
 
-module Make : functor (M : Sqlexpr_concurrency.THREAD) ->
+module Make : functor (M : Sqlexpr_concurrency.THREAD with type 'a key = 'a Lwt.key) ->
 sig
   include S with type 'a result = 'a M.t and type db = single_worker_db
 

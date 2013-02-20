@@ -51,22 +51,11 @@ struct
   let create_recursive_mutex () = ()
   let with_lock () f = f ()
 
-  type 'a key = 'a option ref
+  type 'a key = 'a Lwt.key
 
-  let new_key () = ref None
-
-  let get k = !k
-
-  let with_value k v f =
-    let prev = !k in
-      k := v;
-      try
-        let ret = f () in
-          k := prev;
-          ret
-      with exn ->
-        k := prev;
-        raise exn
+  let new_key    = Lwt.new_key
+  let get        = Lwt.get
+  let with_value = Lwt.with_value
 
   let register_finaliser f x =
     (* FIXME: should run finalisers sequentially in separate thread *)
@@ -105,3 +94,4 @@ struct
 
   let register_finaliser = Lwt_gc.finalise
 end
+
