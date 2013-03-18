@@ -24,5 +24,6 @@ gmon.out
 /setup.data
 /setup.log
 /sqlexpr.mllib
+/sqlexpr.odocl
 /sqlexpr_syntax.mllib
-
+/toplevel
