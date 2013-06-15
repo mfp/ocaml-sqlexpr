@@ -11,7 +11,7 @@ In order to compile this package, you will need:
 * findlib
 * estring
 * csv
-* extlib
+* batteries
 * sqlite3
 * lwt
 * unix
