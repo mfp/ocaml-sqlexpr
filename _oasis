@@ -1,6 +1,6 @@
 OASISFormat: 0.3
 Name:        ocaml-sqlexpr
-Version:     0.5.4
+Version:     0.5.5
 Synopsis:    Type-safe, convenient SQLite database access.
 Authors:     Mauricio Fernandez <mfp@acm.org>
 Maintainers: Mauricio Fernandez <mfp@acm.org>
@@ -52,7 +52,7 @@ Library "sqlexpr_syntax"
   
 Document sqlexpr
     Title:                API reference for Sqlexpr
-    Type:                 ocamlbuild (0.2)
+    Type:                 ocamlbuild (0.3)
     InstallDir:           $htmldir/sqlexpr
     BuildTools+:          ocamldoc
     XOCamlbuildPath:      .
