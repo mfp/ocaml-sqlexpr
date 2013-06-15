@@ -1,11 +1,11 @@
-OASISFormat: 0.2
+OASISFormat: 0.3
 Name:        ocaml-sqlexpr
 Version:     0.5.4
 Synopsis:    Type-safe, convenient SQLite database access.
 Authors:     Mauricio Fernandez <mfp@acm.org>
 Maintainers: Mauricio Fernandez <mfp@acm.org>
 License:     LGPL-2.1 with OCaml linking exception
-Plugins:     DevFiles (0.2), META (0.2)
+Plugins:     DevFiles (0.3), META (0.3)
 BuildTools:  ocamlbuild
 Homepage:    http://github.com/mfp/ocaml-sqlexpr
 Description:
