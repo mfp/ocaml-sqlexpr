@@ -27,3 +27,4 @@ gmon.out
 /sqlexpr.odocl
 /sqlexpr_syntax.mllib
 /toplevel
+/ocaml-sqlexpr*
