@@ -240,7 +240,7 @@ let profile_uuid =
     sprintf "%s %d %d %g %s %g"
       (Unix.gethostname ())
       (Unix.getpid ())
-      (Unix.getppid ())
+      (try Unix.getppid () with _ -> -1)
       (Unix.gettimeofday ())
       Sys.executable_name
       ((Unix.times ()).Unix.tms_utime)
