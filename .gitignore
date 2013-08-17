@@ -7,6 +7,8 @@
 *.cmi
 *.cmo
 *.cma
+*.cmt
+*.cmti
 *.cmxa
 *.omc
 .omakedb*
