@@ -1,12 +1,19 @@
+USE_OCAMLFIND  = true
 NATIVE_ENABLED = true
-BYTE_ENABLED = true
+BYTE_ENABLED   = true
 
-USE_OCAMLFIND = true
-OCAMLPACKS[] = csv batteries sqlite3 estring lwt lwt.unix lwt.syntax threads
+OCAMLPACKS[] =
+    csv
+    batteries
+    sqlite3
+    estring
+    lwt
+    lwt.unix
+    lwt.syntax
+    threads
+
 OCAMLFINDFLAGS = -syntax camlp4o
-OCAMLFLAGS += -thread
-
-OCAMLOPTFLAGS =
+OCAMLFLAGS     = -thread -bin-annot -g -w +a-4-6-9-27..29-32..99 -warn-error +a-4-6-7-9-18-27..29-32..99
 
 OCAMLDEP_MODULES_ENABLED = false
 
