@@ -668,15 +668,24 @@ struct
   let do_select f db p =
     p.directive (POOL.prepare db f) ([], 0, p.sql_statement, p.stmt_id)
 
+  let ensure_reset_stmt stmt f x =
+    try_lwt
+      f x
+    finally
+      POOL.reset stmt
+
   let execute db (p : ('a, _ M.t) statement) =
     do_select
-      (fun stmt sql params -> POOL.step ~sql ~params stmt >> return ())
+      (fun stmt sql params ->
+         ensure_reset_stmt stmt
+           (fun () -> POOL.step ~sql ~params stmt >> return ()) ())
       db p
 
   let insert db p =
     do_select
       (fun stmt sql params ->
-         POOL.step_with_last_insert_rowid ~sql ~params stmt)
+         ensure_reset_stmt stmt
+           (fun () -> POOL.step_with_last_insert_rowid ~sql ~params stmt) ())
       db p
 
   let check_num_cols s stmt expr data =
@@ -688,12 +697,6 @@ struct
           "Sqlexpr_sqlite.%s: wrong number of columns \
            (expected %d, got %d) in SQL: %s" s expected actual
           expr.statement.sql_statement
-
-  let ensure_reset_stmt stmt f x =
-    try_lwt
-      f x
-    finally
-      POOL.reset stmt
 
   let select_f db f expr =
     do_select
