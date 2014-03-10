@@ -3,6 +3,8 @@ open Printf
 open OUnit
 open Lwt
 
+module List = BatList
+
 let aeq_int = assert_equal ~printer:(sprintf "%d")
 let aeq_str = assert_equal ~printer:(sprintf "%S")
 let aeq_float = assert_equal ~printer:(sprintf "%f")
@@ -289,8 +291,11 @@ struct
       nested_iter_and_fold_read db
     end ()
 
-  let test_borrow_worker has_real_borrow_worker () =
-    if has_real_borrow_worker then test_borrow_worker () else return ()
+  let maybe_test flag f () =
+    if flag then f () else return ()
+
+  (* let test_borrow_worker has_real_borrow_worker () = *)
+    (* if has_real_borrow_worker then test_borrow_worker () else return () *)
 
   let all_tests has_real_borrow_worker =
     [
@@ -301,7 +306,7 @@ struct
       "Auto-retry BEGIN" >:: test_retry_begin;
       "Fold and iter" >:: test_fold_and_iter;
       "Nested fold and iter" >:: test_nested_iter_and_fold;
-      "Borrow worker" >:: test_borrow_worker has_real_borrow_worker;
+      "Borrow worker" >:: maybe_test has_real_borrow_worker test_borrow_worker;
     ]
 end
 
@@ -318,6 +323,72 @@ let test_lwt_recursive_mutex () =
     lwt () = Lwt.join [ t1; t2; Lwt_mvar.put mv () ] in
       aeq_list ~printer:string_of_int [3; 2; 1] !l;
       return ()
+
+module type S_LWT = Sqlexpr_sqlite.S with type 'a result = 'a Lwt.t
+
+(* schema changes to :memory: db made by a Sqlexpr_sqlite_lwt worker are not
+ * seen by the others, so allow to use a file by doing ~in_mem:false *)
+let with_db
+      (type a)
+      (module S : S_LWT with type db = a)
+      ?(in_mem = true) f x =
+  let file =
+    if in_mem then ":memory:" else Filename.temp_file "t_sqlexpr_sqlite_" "" in
+  let db = S.open_db file in
+    try_lwt
+      f db x
+    finally
+      S.close_db db;
+      if not in_mem then Sys.remove file;
+      return ()
+
+let test_exclusion (type a)
+      ((module S : S_LWT with type db = a) as s) () =
+  let module Sqlexpr = S in
+  with_db s ~in_mem:false begin fun db () ->
+    S.execute db sql"CREATE TABLE foo(n INTEGER NOT NULL)" >>
+
+    let exclusion_between_tx_and_single_stmt () =
+      let t1, u1 = Lwt.wait () in
+      let t2, u2 = Lwt.wait () in
+      let t3, u3 = Lwt.wait () in
+      let th1    = S.transaction db
+                     (fun db ->
+                        t1 >|= Lwt.wakeup u2 >>
+                        Lwt_unix.sleep 0.010 >>
+                        S.select_one db sql"SELECT @d{COUNT(*)} FROM foo" >|=
+                          aeq_int ~msg:"number of rows (single stmt exclusion)" 0)
+      and th2    = begin
+                     t3 >>
+                     S.execute db sql"INSERT INTO foo VALUES(1)"
+                   end
+      and th3    = begin
+                     Lwt.wakeup u1 ();
+                     lwt () = t2 in
+                       Lwt.wakeup u3 ();
+                       return ()
+                   end
+      in
+        th1 <&> th2 <&> th3 in
+
+    let exclusion_between_txs () =
+      let inside = ref 0 in
+      let check db =
+        try_lwt
+          incr inside;
+          if !inside > 1 then
+            assert_failure "More than one TX in critical region at a time";
+
+          Lwt_unix.sleep 0.005
+        finally
+          decr inside;
+          return ()
+      in
+        Lwt.join (List.init 1 (fun _ -> S.transaction db check))
+    in
+      exclusion_between_txs () >>
+      exclusion_between_tx_and_single_stmt ()
+  end ()
 
 module IdConc =
 struct
@@ -344,6 +415,8 @@ let all_tests =
       "Sqlexpr_sqlite.Make(LwtConcurrency)" >::: M.all_tests false);
     (let module M = Test(LwtConc)(Sqlexpr_sqlite_lwt) in
       "Sqlexpr_sqlite_lwt" >::: M.all_tests true);
+    "Sqlexpr_sqlite.Make(LwtConcurrency) exclusion" >::
+      lwt_run (test_exclusion (module Sqlexpr_sqlite.Make(LwtConc)));
   ]
 
 let _ =

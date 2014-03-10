@@ -518,6 +518,10 @@ struct
 
   let steal_worker db f = M.with_lock (get_db_mutex db) (fun () -> f db)
 
+  let prepare db f (params, nparams, sql, stmt_id) =
+    steal_worker db
+      (fun db -> prepare db f (params, nparams, sql, stmt_id))
+
   let step ?sql ?params stmt =
     run ?sql ?params ~stmt (Stmt.db_handle stmt) Stmt.step stmt
 
