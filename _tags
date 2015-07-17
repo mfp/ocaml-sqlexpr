@@ -1,4 +1,5 @@
-<**/*.ml>: syntax_camlp4o
+<src/*.ml>: syntax_camlp4o
+<tests/*>: syntax_camlp4o, package(sqlexpr.syntax), package(sqlexpr), thread
 
 # OASIS_START
 # DO NOT EDIT (digest: 29b8c77cefb2e97362d5ec72a36f640f)
