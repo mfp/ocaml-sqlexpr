@@ -2,6 +2,7 @@ open Printf
 open Sqlexpr_sqlite
 open Lwt
 
+module Option = Sqlexpr_utils.Option
 module CONC = Sqlexpr_concurrency.Lwt
 
 let failwithfmt fmt = ksprintf (fun s -> try_lwt failwith s) fmt
@@ -251,7 +252,7 @@ struct
         return ()
 
   let do_raise_error ?sql ?params ?errmsg errcode =
-    let msg = Sqlite3.Rc.to_string errcode ^ BatOption.map_default ((^) " ") "" errmsg in
+    let msg = Sqlite3.Rc.to_string errcode ^ Option.map_default ((^) " ") "" errmsg in
     let msg = match sql with
         None -> msg
       | Some sql -> sprintf "%s in %s" msg (prettify_sql_stmt sql) in

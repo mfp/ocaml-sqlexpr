@@ -3,8 +3,6 @@ open Printf
 open OUnit
 open Lwt
 
-module List = BatList
-
 let aeq_int = assert_equal ~printer:(sprintf "%d")
 let aeq_str = assert_equal ~printer:(sprintf "%S")
 let aeq_float = assert_equal ~printer:(sprintf "%f")
@@ -384,7 +382,7 @@ let test_exclusion (type a)
           decr inside;
           return ()
       in
-        Lwt.join (List.init 1 (fun _ -> S.transaction db check))
+        Lwt.join (Sqlexpr_utils.List.init 1 (fun _ -> S.transaction db check))
     in
       exclusion_between_txs () >>
       exclusion_between_tx_and_single_stmt ()
