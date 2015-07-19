@@ -4,7 +4,6 @@ BYTE_ENABLED   = true
 
 OCAMLPACKS[] =
     csv
-    batteries
     sqlite3
     estring
     lwt
@@ -13,7 +12,7 @@ OCAMLPACKS[] =
     threads
 
 OCAMLFINDFLAGS = -syntax camlp4o
-OCAMLFLAGS     = -thread -bin-annot -g -w +a-4-6-9-27..29-32..99 -warn-error +a-4-6-7-9-18-27..29-32..99
+OCAMLFLAGS     = -thread -bin-annot -g -w +a-4-6-9-27..29-32..99 -warn-error -a
 
 OCAMLDEP_MODULES_ENABLED = false
 
@@ -23,22 +22,12 @@ OCAMLDEP_MODULES_ENABLED = false
             $(mapprefix -I, $(OCAMLINCLUDES)) \
             $(OCAMLFLAGS) $(OCAMLCFLAGS) -i $< > $@
 
-section
-	NATIVE_ENABLED = false
-	OCAMLPACKS[] = estring camlp4.quotations
-	pa_sql.cmi pa_sql.cmo: pa_sql.ml
+.SUBDIRS: src
 
-.SCANNER: scan-ocaml-%.ml: %.ml pa_sql.cmo
-.SCANNER: scan-ocaml-%.mli: %.mli pa_sql.cmo
-OCAMLFINDFLAGS += -syntax camlp4o -ppopt pa_sql.cmo
+.PHONY: clean
 
-OCamlLibrary(sqlexpr, sqlexpr_concurrency sqlexpr_sqlite sqlexpr_sqlite_lwt)
-
-section
-    OCAMLPACKS[] += oUnit
-    OCAML_LIBS[] += sqlexpr
-    OCamlProgram(t_sqlexpr_sqlite, t_sqlexpr_sqlite)
-    $(addsuffixes .o .cmx .cmi .cmo, t_sqlexpr_sqlite):
+clean:
+	rm -f $(filter-proper-targets $(ls R, .)) *.s *.annot *.so *.a
 
 section
     VERSION = $`(shell oasis query Version | tail -1)
@@ -58,14 +47,3 @@ section
 	gzip $(NAME).tar
 	git checkout master
 	git branch -D $(BRANCH)
-
-.DEFAULT: pa_sql.cmo sqlexpr.cma sqlexpr.cmxa
-
-.PHONY: test
-test: t_sqlexpr_sqlite
-	./t_sqlexpr_sqlite
-
-.PHONY: clean
-
-clean:
-	rm -f $(filter-proper-targets $(ls R, .)) *.s *.annot *.so *.a
