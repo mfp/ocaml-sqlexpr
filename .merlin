@@ -1,0 +1,13 @@
+S src/
+S src/syntax
+S tests
+B _build/src
+B _build/src/syntax
+B _build/tests
+B +threads
+PKG lwt
+PKG lwt.syntax
+PKG sqlite3
+PKG unix
+PKG csv
+PKG thread

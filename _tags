@@ -1,10 +1,12 @@
-<**/*.ml>: syntax_camlp4o
+<src/*.ml>: syntax_camlp4o
+<tests/*>: syntax_camlp4o, package(sqlexpr.syntax), package(sqlexpr), thread
 
 # OASIS_START
-# DO NOT EDIT (digest: 29b8c77cefb2e97362d5ec72a36f640f)
-# Ignore VCS directories, you can use the same kind of rule outside 
-# OASIS_START/STOP if you want to exclude directories that contains 
+# DO NOT EDIT (digest: 52e395909f3ee097352522e19988a462)
+# Ignore VCS directories, you can use the same kind of rule outside
+# OASIS_START/STOP if you want to exclude directories that contains
 # useless stuff for the build process
+true: annot, bin_annot
 <**/.svn>: -traverse
 <**/.svn>: not_hygienic
 ".bzr": -traverse
@@ -16,18 +18,43 @@
 "_darcs": -traverse
 "_darcs": not_hygienic
 # Library sqlexpr
-"sqlexpr.cmxs": use_sqlexpr
-<*.ml{,i}>: pkg_csv
-<*.ml{,i}>: pkg_batteries
-<*.ml{,i}>: pkg_sqlite3
-<*.ml{,i}>: pkg_lwt
-<*.ml{,i}>: pkg_lwt.syntax
-<*.ml{,i}>: pkg_lwt.unix
-<*.ml{,i}>: pkg_unix
-<*.ml{,i}>: pkg_threads
+"src/sqlexpr.cmxs": use_sqlexpr
+<src/*.ml{,i,y}>: pkg_csv
+<src/*.ml{,i,y}>: pkg_estring
+<src/*.ml{,i,y}>: pkg_lwt
+<src/*.ml{,i,y}>: pkg_lwt.syntax
+<src/*.ml{,i,y}>: pkg_lwt.unix
+<src/*.ml{,i,y}>: pkg_sqlite3
+<src/*.ml{,i,y}>: pkg_threads
+<src/*.ml{,i,y}>: pkg_unix
 # Library sqlexpr_syntax
-"sqlexpr_syntax.cmxs": use_sqlexpr_syntax
-<*.ml{,i}>: pkg_camlp4.lib
-<*.ml{,i}>: pkg_camlp4.quotations.r
-<*.ml{,i}>: pkg_estring
+"src/syntax/sqlexpr_syntax.cmxs": use_sqlexpr_syntax
+<src/syntax/*.ml{,i,y}>: pkg_camlp4.lib
+<src/syntax/*.ml{,i,y}>: pkg_camlp4.quotations.r
+<src/syntax/*.ml{,i,y}>: pkg_estring
+# Executable example
+<tests/example.{native,byte}>: pkg_camlp4.lib
+<tests/example.{native,byte}>: pkg_camlp4.quotations.r
+<tests/example.{native,byte}>: pkg_csv
+<tests/example.{native,byte}>: pkg_estring
+<tests/example.{native,byte}>: pkg_lwt
+<tests/example.{native,byte}>: pkg_lwt.syntax
+<tests/example.{native,byte}>: pkg_lwt.unix
+<tests/example.{native,byte}>: pkg_sqlite3
+<tests/example.{native,byte}>: pkg_threads
+<tests/example.{native,byte}>: pkg_unix
+<tests/example.{native,byte}>: use_sqlexpr
+<tests/example.{native,byte}>: use_sqlexpr_syntax
+<tests/*.ml{,i,y}>: pkg_camlp4.lib
+<tests/*.ml{,i,y}>: pkg_camlp4.quotations.r
+<tests/*.ml{,i,y}>: pkg_csv
+<tests/*.ml{,i,y}>: pkg_estring
+<tests/*.ml{,i,y}>: pkg_lwt
+<tests/*.ml{,i,y}>: pkg_lwt.syntax
+<tests/*.ml{,i,y}>: pkg_lwt.unix
+<tests/*.ml{,i,y}>: pkg_sqlite3
+<tests/*.ml{,i,y}>: pkg_threads
+<tests/*.ml{,i,y}>: pkg_unix
+<tests/*.ml{,i,y}>: use_sqlexpr
+<tests/*.ml{,i,y}>: use_sqlexpr_syntax
 # OASIS_STOP

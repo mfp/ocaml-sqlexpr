@@ -1,9 +1,7 @@
 
 open Printf
 
-module List = struct include List include BatList end
-module Option = BatOption
-
+module Option = Sqlexpr_utils.Option
 exception Error of string * exn
 exception Sqlite_error of string * Sqlite3.Rc.t
 

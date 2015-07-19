@@ -29,19 +29,20 @@ Description:
 SourceRepository github
   Type:     git
   Location: git://github.com/mfp/ocaml-sqlexpr.git
-  
+
 Library sqlexpr
-  Path:             .
+  Path:             src
   BuildTools:       ocamlbuild
   Modules:          Sqlexpr_concurrency,
                     Sqlexpr_sqlite,
                     Sqlexpr_sqlite_lwt
-  BuildDepends:     csv, batteries, sqlite3, estring, lwt (>= 2.2.0), lwt.syntax, lwt.unix,
+  InternalModules:  Sqlexpr_utils
+  BuildDepends:     csv, sqlite3, estring, lwt (>= 2.2.0), lwt.syntax, lwt.unix,
                     unix, threads
   XMETADescription: SQLite database access.
 
 Library "sqlexpr_syntax"
-  Path:             .
+  Path:             src/syntax/
   FindlibName:      syntax
   FindlibParent:    sqlexpr
   Modules:          Pa_sql
@@ -49,7 +50,15 @@ Library "sqlexpr_syntax"
   XMETADescription: Syntax extension for SQL statements/expressions
   XMETAType:        syntax
   XMETARequires:    camlp4, estring
-  
+
+Executable "example"
+  Path:             tests/
+  MainIs:           example.ml
+  BuildDepends:     sqlexpr.syntax, sqlexpr
+  CompiledObject:   best
+  Install:          false
+  Build:            false  # FIXME
+
 Document sqlexpr
     Title:                API reference for Sqlexpr
     Type:                 ocamlbuild (0.3)
