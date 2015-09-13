@@ -93,5 +93,7 @@ struct
             (fun () -> Lwt.with_value locks (Some (LOCKS.add m.id s)) f)
 
   let register_finaliser = Lwt_gc.finalise
+
+  let fail e = fail (try raise e with exn -> exn)
 end
 
