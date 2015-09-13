@@ -331,6 +331,10 @@ sig
 
   type db
   type stmt
+
+  val set_retry_on_busy : bool -> unit
+  val get_retry_on_busy : unit -> bool
+
   val open_db : ?init:(Sqlite3.db -> unit) -> string -> db
   val close_db : db -> unit
   val prepare :
@@ -382,6 +386,11 @@ struct
   type 'a result = 'a Lwt.t
 
   let get_handle db = db.handle
+
+  let retry_on_busy = ref false
+
+  let set_retry_on_busy b = retry_on_busy := b
+  let get_retry_on_busy () = !retry_on_busy
 
   let transaction_key =
     let t = identity_pool_transaction_key_table in
@@ -452,7 +461,7 @@ struct
           sprintf "%s with params %s" msg (string_of_params (List.rev params))
     in M.fail (Error (msg, Sqlite_error (msg, errcode)))
 
-  let rec run ?(retry_on_busy=false) ?stmt ?sql ?params db f x = match f x with
+  let rec run ?(retry_on_busy = !retry_on_busy) ?stmt ?sql ?params db f x = match f x with
       Sqlite3.Rc.OK | Sqlite3.Rc.ROW | Sqlite3.Rc.DONE as r -> return r
     | Sqlite3.Rc.BUSY when retry_on_busy ->
         M.sleep 0.010 >> run ~retry_on_busy ?sql ?stmt ?params db f x
@@ -564,6 +573,9 @@ sig
   exception Error of string * exn
   exception Sqlite_error of string * Sqlite3.Rc.t
 
+  val set_retry_on_busy : bool -> unit
+  val get_retry_on_busy : unit -> bool
+
   val open_db : ?init:(Sqlite3.db -> unit) -> string -> db
   val close_db : db -> unit
   val borrow_worker : db -> (db -> 'a result) -> 'a result
@@ -661,6 +673,9 @@ struct
 
   exception Error = Error
   exception Sqlite_error = Sqlite_error
+
+  let set_retry_on_busy = POOL.set_retry_on_busy
+  let get_retry_on_busy = POOL.get_retry_on_busy
 
   let open_db = POOL.open_db
   let close_db = POOL.close_db

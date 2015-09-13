@@ -88,6 +88,11 @@ struct
 
   module TLS = Lwt
 
+  let retry_on_busy = ref false
+
+  let set_retry_on_busy b = retry_on_busy := b
+  let get_retry_on_busy () = !retry_on_busy
+
   (* Pool of threads: *)
   let threads : thread Queue.t = Queue.create ()
 
@@ -268,7 +273,7 @@ struct
       | None -> detach worker (fun dbh () -> Sqlite3.errmsg dbh) ()
     in try_lwt return (do_raise_error ?sql ?params ~errmsg errcode)
 
-  let rec run ?(retry_on_busy = false) ?stmt ?sql ?params worker f x =
+  let rec run ?(retry_on_busy = !retry_on_busy) ?stmt ?sql ?params worker f x =
     detach worker f x >>= function
       Sqlite3.Rc.OK | Sqlite3.Rc.ROW | Sqlite3.Rc.DONE as r -> return r
     | Sqlite3.Rc.BUSY when retry_on_busy ->

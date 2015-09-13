@@ -52,6 +52,16 @@ sig
   exception Sqlite_error of string * Sqlite3.Rc.t
 
 
+  (** Specify whether to retry operations by default when SQLite3 returns
+    * BUSY. (As of 0.6.0, the modules supplied with sqlexpr use false as their
+    * default value; will likely be changed to true in a subsequent release.) *)
+  val set_retry_on_busy : bool -> unit
+
+  (** Returns whether operations are retried by default when SQLite3 returns
+    * BUSY. (As of 0.6.0, the modules supplied with sqlexpr use false as their
+    * default value; will likely be changed to true in a subsequent release.) *)
+  val get_retry_on_busy : unit -> bool
+
   (** Open the DB whose filename is given. [":memory:"] refers to an in-mem DB.
     * @param [init] function to be applied to [Sqlite3.db] handle(s) before
     * they are used (can be used to register functions or initialize schema in
@@ -226,8 +236,13 @@ sig
 
   type db
   type stmt
+
+  val set_retry_on_busy : bool -> unit
+  val get_retry_on_busy : unit -> bool
+
   val open_db : ?init:(Sqlite3.db -> unit) -> string -> db
   val close_db : db -> unit
+
   val prepare :
     db -> (stmt -> string -> Sqlite3.Data.t list -> 'a result) -> st -> 'a result
   val step :
