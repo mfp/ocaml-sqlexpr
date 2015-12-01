@@ -47,7 +47,7 @@ let parse str =
 
   (* logic to extract inputs and outputs *)
   let inrgx = Re_pcre.regexp {|%([dlLfsSba])(\?)?|} in
-  let outrgx = Re_pcre.regexp {|@([dlLfsSba])(\?)?\{((\w|\.)+)\}|} in
+  let outrgx = Re_pcre.regexp {|@([dlLfsSba])(\?)?\{([\w.%*()]+)\}|} in
   let getin (acc : input list) s =
     let groups = Re.get_all s in
     let typ = Array.get groups 1 |> str2typ in

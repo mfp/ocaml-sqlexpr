@@ -38,6 +38,14 @@ let test_sql _ =
   let s = pqi [%sql "@s{:kilroy}     @@was %@{here}"] in
   ae "@s{:kilroy}     @@was %@{here}" s;
 
+  (* interpolation inside outputs should be allowed *)
+  let s = pq [%sql "select @d{%d}"] in
+  ae "select ?" s;
+
+  (* allow some other non-alphanumeric characters *)
+  let s = pq [%sql "select @d{COUNT(*)} FROM foo"] in
+  ae "select COUNT(*) FROM foo" s;
+
   let s = pqi [%sql "excellent"] in
   ae "excellent" s
 
