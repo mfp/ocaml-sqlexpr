@@ -1,9 +1,6 @@
 
 open Printf
 open OUnit
-open Lwt
-
-let (>>=) = Lwt.bind
 
 let aeq_int = assert_equal ~printer:(sprintf "%d")
 let aeq_str = assert_equal ~printer:(sprintf "%S")
@@ -30,6 +27,7 @@ struct
   module S = Sqlexpr
 
   let (>|=) f g = bind f (fun x -> return (g x))
+  let (>>=) = Lwt.bind
 
   (* schema changes to :memory: db made by a Sqlexpr_sqlite_lwt worker are not
    * seen by the others, so allow to use a file by doing ~in_mem:false *)
@@ -70,7 +68,7 @@ struct
 
   let insert_s db l =
     S.execute db [%sql "CREATE TABLE foo(id INTEGER PRIMARY KEY, v TEXT)"] >>= fun () ->
-    iter (S.execute db [sql "INSERT INTO foo(v) VALUES(%s)"]) l
+    iter (S.execute db [%sql "INSERT INTO foo(v) VALUES(%s)"]) l
 
   let insert_S db l =
     S.execute db [%sql "CREATE TABLE foo(id INTEGER PRIMARY KEY, v BLOB)"] >>= fun () ->
