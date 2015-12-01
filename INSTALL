@@ -1,7 +1,16 @@
 This is the INSTALL file for the ocaml-sqlexpr distribution.
 
 This package uses OASIS to generate its build system. See section OASIS for
-full information. 
+full information.
+
+If you obtained the sources from the source repository (as opposed to a
+release tarball), you will have to generate the build system using oasis, with
+
+     $ oasis setup
+
+If you don't have OASIS, the easiest way to install it is via OPAM with
+
+     $ opam install oasis
 
 Dependencies
 ============
