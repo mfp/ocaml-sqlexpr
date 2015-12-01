@@ -38,9 +38,10 @@ See also the example file `example.ml`.
 ## Dependencies
 
 csv, sqlite3, estring, lwt (>= 2.2.0), lwt.syntax, lwt.unix,
-unix, threads
+unix, threads, re, ppx_tools
 
-## Syntax extension
+
+## Camlp4 syntax extension
 
 **ocaml-sqlexpr** includes a syntax extension to build type-safe SQL
 statements and expressions:
@@ -71,6 +72,18 @@ val auto_check_db : Format.formatter -> bool
 
 each of them returns `false` on error, and writes the error messages to the
 provided formatter.
+
+
+## PPX syntax extension
+
+In addition to the camlp4-based syntax extension, **ocaml-sqlexpr** includes a
+syntax extension using extension points (ppx). The conversion from camlp4 to
+ppx is as follows:
+
+- `[%sql "..."]` corresponds to `sql"..."`
+- `[%sqlc "..."]` corresponds to `sqlc"..."`
+- `[%sqlcheck "sqlite"]` corresponds to `sql_check"sqlite"`
+- `[%sqlinit "..."]` corresponds to `sqlinit"..."`
 
 
 ## SQL statement/expression syntax
