@@ -170,3 +170,25 @@ let iter_users db f =
   S.iter db f sqlc"SELECT @L{id}, @s{login}, @s{password}, @s?{email}
                      FROM users"
 ```
+
+### Test and Sample Build Instructions
+
+Example Camlp4 Code:
+```
+ocamlfind ocamlc -package sqlexpr,sqlexpr.syntax -syntax camlp4o -linkpkg -thread -o sqlexpr_camlp4 tests/example.ml
+```
+
+Example PPX Code
+```
+ocamlfind ocamlc -package sqlexpr.ppx -linkpkg -thread -o sqlexpr_ppx tests/example_ppx.ml
+```
+
+Camlp4 based tests:
+```
+ocamlfind ocamlc -package sqlexpr,sqlexpr.syntax,lwt.syntax,oUnit -syntax camlp4o -linkpkg -thread -o sqlexpr_camlp4_test tests/t_sqlexpr_sqlite.ml
+```
+
+PPX based tests:
+```
+ocamlfind ocamlc -package sqlexpr.ppx,lwt.ppx,oUnit -ppxopt lwt.ppx,-no-debug -linkpkg -thread -o sqlexpr_ppx_test tests/t_ppx_sqlexpr.ml
+```
