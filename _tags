@@ -1,6 +1,3 @@
-<src/*.ml>: syntax_camlp4o
-<tests/*>: syntax_camlp4o, package(sqlexpr.syntax), package(sqlexpr), thread
-
 # OASIS_START
 # DO NOT EDIT (digest: 52e395909f3ee097352522e19988a462)
 # Ignore VCS directories, you can use the same kind of rule outside

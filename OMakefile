@@ -22,7 +22,7 @@ OCAMLDEP_MODULES_ENABLED = false
             $(mapprefix -I, $(OCAMLINCLUDES)) \
             $(OCAMLFLAGS) $(OCAMLCFLAGS) -i $< > $@
 
-.SUBDIRS: src test
+.SUBDIRS: src tests
 
 .PHONY: clean
 
