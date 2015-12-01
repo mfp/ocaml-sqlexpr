@@ -1,16 +1,43 @@
 
-.SCANNER: scan-ocaml-%.ml: %.ml $(ROOT)/src/syntax/pa_sql.cmo
-.SCANNER: scan-ocaml-%.mli: %.mli $(ROOT)/src/syntax/pa_sql.cmo
+EXTENSIONS = $(ROOT)/src/syntax/pa_sql.cmo $(ROOT)/src/ppx/ppx_sqlexpr
 
-OCAMLFINDFLAGS += -syntax camlp4o -ppopt $(ROOT)/src/syntax/pa_sql.cmo
+.SCANNER: scan-ocaml-%.ml: %.ml $(EXTENSIONS)
+.SCANNER: scan-ocaml-%.mli: %.mli $(EXTENSIONS)
+
+OCAMLINCLUDES += $(ROOT)/src
 
 section
+    OCAMLFINDFLAGS += -syntax camlp4o -ppopt $(ROOT)/src/syntax/pa_sql.cmo
     OCAMLPACKS[] += oUnit
-    OCAMLINCLUDES += $(ROOT)/src
     OCAML_LIBS[] += $(ROOT)/src/sqlexpr
+
     OCamlProgram(t_sqlexpr_sqlite, t_sqlexpr_sqlite)
-    $(addsuffixes .o .cmx .cmi .cmo, t_sqlexpr_sqlite):
+
+section
+    OCAMLPACKS[] =
+        compiler-libs.common
+        csv
+        lwt
+        lwt.ppx
+        lwt.unix
+        ppx_tools.metaquot
+        re.pcre
+        sqlite3
+        threads
+        oUnit
+        unix
+
+    OCAMLFINDFLAGS = -ppx $(ROOT)/src/ppx/ppx_sqlexpr -ppxopt lwt.ppx,-no-debug
+    OCAMLDEPFLAGS  = -ppx $(ROOT)/src/ppx/ppx_sqlexpr
+
+    OCamlProgram(t_ppx_parse, t_ppx_parse)
+    OCamlProgram(t_ppx_sqlexpr, t_ppx_sqlexpr)
+    $(addsuffixes .o .cmx .cmi .cmo, t_ppx_parse t_ppx_sqlexpr):
 
 .PHONY: test
-test: t_sqlexpr_sqlite
+test: t_sqlexpr_sqlite$(EXE) t_ppx_parse$(EXE) t_ppx_sqlexpr$(EXE)
     ./t_sqlexpr_sqlite
+    ./t_ppx_parse
+    ./t_ppx_sqlexpr
+
+# vim: set ts=8 expandtab sw=4:
