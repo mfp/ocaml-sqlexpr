@@ -1,20 +1,19 @@
-
-ocaml-sqlexpr is a simple library and syntax extension for type-safe,
+**ocaml-sqlexpr** is a simple library and syntax extension for type-safe,
 convenient execution of SQL statements, currently compatible with Sqlite3.
 
 The latest version can be found at https://github.com/mfp/ocaml-sqlexpr
 
-Sqlexpr features:
-* automated prepared statement caching, param binding, data extraction, error
-  checking (including automatic stmt reset to avoid BUSY/LOCKED errors in
-  subsequent queries), stmt finalization on db close, etc.
-* HOFs like iter, fold, transaction
+**ocaml-sqlexpr** features:
+* automated prepared statement caching, parameter binding, data extraction, error
+  checking (including automatic statement reset to avoid BUSY/LOCKED errors in
+  subsequent queries), statement finalization on database close, etc.
+* higher order functions like *iter*, *fold*, *transaction*
 * support for different concurrency models: everything is functorized over a
-  THREAD monad, so you can for instance do concurrent folds/iters with Lwt
-* support for SQL stmt syntax checks and some extra semantic checking (column
-  names, etc)
+  THREAD monad, so you can for instance do concurrent treatmments with Lwt
+* support for SQL statement syntax checks and some extra semantic checking (column
+  names, etc.)
 
-Sqlexpr is used as follows:
+**ocaml-sqlexpr** is used as follows:
 
 ```ocaml
 module Sqlexpr = Sqlexpr_sqlite.Make(Sqlexpr_concurrency.Id)
@@ -33,25 +32,24 @@ let () =
     ]
 ```
 
-See also example.ml.
+See also the example file `example.ml`.
 
-Dependencies
-============
 
-csv, batteries, sqlite3, estring, lwt (>= 2.2.0), lwt.syntax, lwt.unix,
+## Dependencies
+
+csv, sqlite3, estring, lwt (>= 2.2.0), lwt.syntax, lwt.unix,
 unix, threads
 
-Syntax extension
-================
+## Syntax extension
 
-ocaml-sqlexpr includes a syntax extension to build type-safe SQL
-statements/expressions:
+**ocaml-sqlexpr** includes a syntax extension to build type-safe SQL
+statements and expressions:
 
 
-- `sql"..."`   denotes a SQL statement/expression
-- `sqlc"..."`  denotes a SQL statement/expression that is to be cached
+- `sql"..."`   denotes a SQL statement or expression
+- `sqlc"..."`  denotes a SQL statement or expression that is to be cached
 - `sql_check"sqlite"` returns a tuple of functions to initialize, check the
-                      validity of the SQL statements/expressions and
+                      validity of the SQL statements or expressions and
                       check against an auto-initialized temporary database.
 - `sqlinit"..."` is equivalent to `sql"..."`, but the statement will be added
                  to the list of statements to be executed in the automatically
@@ -74,17 +72,17 @@ val auto_check_db : Format.formatter -> bool
 each of them returns `false` on error, and writes the error messages to the
 provided formatter.
 
-SQL statement/expression syntax
--------------------------------
 
-sql/sqlc literals are similar to Printf's format strings and their precise
+## SQL statement/expression syntax
+
+Literals marked with `sql` or `sqlc` are similar to Printf's format strings and their precise
 types depend on their contents. They accept input parameters (similarly to
 Printf) and, in the case of SQL expressions, their execution will yield a
 tuple whose type is determined by the output parameters.
 
-Input parameters are denoted with %X where X is one of:
+Input parameters are denoted with `%X` where `X` is one of:
 
-  input parameter  | OCaml type
+  Input parameter  | OCaml type
   -----------------|-----------
   %d               | int
   %l               | Int32.t
@@ -95,14 +93,14 @@ Input parameters are denoted with %X where X is one of:
   %b               | bool
   %a               | ('a -> string) (resulting string handled as BLOB by SQLite)
 
-A literal '%' is denoted with '%%'.
+A literal `%` is denoted with `%%`.
 
 A parameter is made nullable (turning the OCaml type into a `_ option`) by
-appending a '?', e.g. '%d?'.
+appending a `?`, e.g. `%d?`.
 
-Output parameters are denoted with @X{SQL expression} where X is one of:
+Output parameters are denoted with `@X{SQL expression}` where `X` is one of:
 
-  output parameter | OCaml type
+  Output parameter | OCaml type
   ---------------- | ----------
   @d               | int
   @l               | Int32.t
@@ -112,14 +110,15 @@ Output parameters are denoted with @X{SQL expression} where X is one of:
   @f               | float
   @b               | bool
 
-A literal '@' is denoted with '@@'.
+A literal `@` is denoted with `@@`
 As in the case of input parameters, output parameters can be made nullable by
-appending a '?'.
+appending a `?`.
 
 A `sql"..."` or `sqlc"..."` literal is of type `_ statement` if it has no output
 parameters, and of type `_ expression` if it has at least one.
 
-Examples:
+
+### Examples
 
 ```ocaml
 sql"SELECT @s{name} FROM users"                   is an expression
@@ -129,10 +128,11 @@ sql"DELETE FROM users WHERE id = %d"              is a statement
 ```
 
 Statements are executed with `execute` or `insert` (which returns the id of
-the new row); expressions are "selected" with a function from the `select*`
-family or a HOF like `iter` or `fold`.
+the new row); expressions are “selected” with a function from the `select*`
+family or a higher order function like `iter` or `fold`.
 
-Examples:
+
+### Examples
 
 ```ocaml
 module Sqlexpr = Sqlexpr_sqlite.Make(Sqlexpr_concurrency.Id)
