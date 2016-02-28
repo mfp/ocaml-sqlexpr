@@ -13,6 +13,7 @@ install:[
 build-doc: [["ocaml" "setup.ml" "-doc"]]
 remove: [["ocamlfind" "remove" "sqlexpr"]]
 depends: [
+  "ppx_tools"
   "estring"
   "csv"
   "lwt" {>= "2.2.0"}
