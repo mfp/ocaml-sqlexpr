@@ -38,9 +38,10 @@ See also the example file `example.ml`.
 ## Dependencies
 
 csv, sqlite3, estring, lwt (>= 2.2.0), lwt.syntax, lwt.unix,
-unix, threads
+unix, threads, re, ppx_tools
 
-## Syntax extension
+
+## Camlp4 syntax extension
 
 **ocaml-sqlexpr** includes a syntax extension to build type-safe SQL
 statements and expressions:
@@ -71,6 +72,18 @@ val auto_check_db : Format.formatter -> bool
 
 each of them returns `false` on error, and writes the error messages to the
 provided formatter.
+
+
+## PPX syntax extension
+
+In addition to the camlp4-based syntax extension, **ocaml-sqlexpr** includes a
+syntax extension using extension points (ppx). The conversion from camlp4 to
+ppx is as follows:
+
+- `[%sql "..."]` corresponds to `sql"..."`
+- `[%sqlc "..."]` corresponds to `sqlc"..."`
+- `[%sqlcheck "sqlite"]` corresponds to `sql_check"sqlite"`
+- `[%sqlinit "..."]` corresponds to `sqlinit"..."`
 
 
 ## SQL statement/expression syntax
@@ -156,4 +169,26 @@ let get_email db =
 let iter_users db f =
   S.iter db f sqlc"SELECT @L{id}, @s{login}, @s{password}, @s?{email}
                      FROM users"
+```
+
+### Test and Sample Build Instructions
+
+Example Camlp4 Code:
+```
+ocamlfind ocamlc -package sqlexpr,sqlexpr.syntax -syntax camlp4o -linkpkg -thread -o sqlexpr_camlp4 tests/example.ml
+```
+
+Example PPX Code
+```
+ocamlfind ocamlc -package sqlexpr.ppx -linkpkg -thread -o sqlexpr_ppx tests/example_ppx.ml
+```
+
+Camlp4 based tests:
+```
+ocamlfind ocamlc -package sqlexpr,sqlexpr.syntax,lwt.syntax,oUnit -syntax camlp4o -linkpkg -thread -o sqlexpr_camlp4_test tests/t_sqlexpr_sqlite.ml
+```
+
+PPX based tests:
+```
+ocamlfind ocamlc -package sqlexpr.ppx,lwt.ppx,oUnit -ppxopt lwt.ppx,-no-debug -linkpkg -thread -o sqlexpr_ppx_test tests/t_ppx_sqlexpr.ml
 ```

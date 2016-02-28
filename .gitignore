@@ -26,9 +26,16 @@ oUnit-anon.cache
 /setup.ml
 /setup.data
 /setup.log
+/src/META
+/src/ppx/ppx_sqlexpr
+/src/sqlexpr.mllib
+/src/syntax/sqlexpr_syntax.mllib
 /sqlexpr.mllib
 /sqlexpr.odocl
 /sqlexpr_syntax.mllib
+/tests/t_ppx_parse
+/tests/t_ppx_sqlexpr
+/tests/t_sqlexpr_sqlite
 /toplevel
 /ocaml-sqlexpr*
 *.mldylib

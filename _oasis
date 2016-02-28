@@ -35,8 +35,8 @@ Library sqlexpr
   BuildTools:       ocamlbuild
   Modules:          Sqlexpr_concurrency,
                     Sqlexpr_sqlite,
-                    Sqlexpr_sqlite_lwt
-  InternalModules:  Sqlexpr_utils
+                    Sqlexpr_sqlite_lwt,
+                    Sqlexpr_utils
   BuildDepends:     csv, sqlite3, estring, lwt (>= 2.2.0), lwt.syntax, lwt.unix,
                     unix, threads
   XMETADescription: SQLite database access.
@@ -50,6 +50,21 @@ Library "sqlexpr_syntax"
   XMETADescription: Syntax extension for SQL statements/expressions
   XMETAType:        syntax
   XMETARequires:    camlp4, estring
+
+Library "ppx"
+  Path:             src/ppx/
+  FindlibName:      ppx
+  FindlibParent:    sqlexpr
+  XMETADescription: PPX extension for SQL statements/expressions
+  XMETARequires:    sqlexpr
+  XMETAExtraLines:  ppx = "ppx_sqlexpr"
+
+Executable "ppx_sqlexpr"
+  Path:             src/ppx/
+  MainIs:           ppx_sqlexpr.ml
+  BuildDepends:     unix, re.pcre, compiler-libs.common, ppx_tools.metaquot
+  CompiledObject:   best
+  Install:          true
 
 Executable "example"
   Path:             tests/

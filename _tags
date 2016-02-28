@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: 52e395909f3ee097352522e19988a462)
+# DO NOT EDIT (digest: 8c33eb34542ae662c8d9b52b2978ec0d)
 # Ignore VCS directories, you can use the same kind of rule outside
 # OASIS_START/STOP if you want to exclude directories that contains
 # useless stuff for the build process
@@ -29,6 +29,17 @@ true: annot, bin_annot
 <src/syntax/*.ml{,i,y}>: pkg_camlp4.lib
 <src/syntax/*.ml{,i,y}>: pkg_camlp4.quotations.r
 <src/syntax/*.ml{,i,y}>: pkg_estring
+# Library ppx
+"src/ppx/ppx.cmxs": use_ppx
+# Executable ppx_sqlexpr
+<src/ppx/ppx_sqlexpr.{native,byte}>: pkg_compiler-libs.common
+<src/ppx/ppx_sqlexpr.{native,byte}>: pkg_ppx_tools.metaquot
+<src/ppx/ppx_sqlexpr.{native,byte}>: pkg_re.pcre
+<src/ppx/ppx_sqlexpr.{native,byte}>: pkg_unix
+<src/ppx/*.ml{,i,y}>: pkg_compiler-libs.common
+<src/ppx/*.ml{,i,y}>: pkg_ppx_tools.metaquot
+<src/ppx/*.ml{,i,y}>: pkg_re.pcre
+<src/ppx/*.ml{,i,y}>: pkg_unix
 # Executable example
 <tests/example.{native,byte}>: pkg_camlp4.lib
 <tests/example.{native,byte}>: pkg_camlp4.quotations.r
