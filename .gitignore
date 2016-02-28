@@ -28,6 +28,7 @@ oUnit-anon.cache
 /setup.log
 /src/META
 /src/ppx/ppx_sqlexpr
+/src/ppx/ppx.mllib
 /src/sqlexpr.mllib
 /src/syntax/sqlexpr_syntax.mllib
 /sqlexpr.mllib
