@@ -40,7 +40,8 @@ section
         git checkout -b $(BRANCH)
 	oasis setup
 	git add -f src/META sqlexpr.odocl Makefile _tags configure \
-	    myocamlbuild.ml setup.ml src/sqlexpr.mllib src/syntax/sqlexpr_syntax.mllib
+	    myocamlbuild.ml setup.ml \
+	    src/sqlexpr.mllib src/syntax/sqlexpr_syntax.mllib src/ppx/ppx.mllib
 	git commit -m "Add OASIS-generated build system."
 	git archive -v --prefix $(NAME)/ -o $(NAME).tar HEAD
 	rm -f $(NAME).tar.gz
