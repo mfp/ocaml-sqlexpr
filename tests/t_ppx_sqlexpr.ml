@@ -401,7 +401,7 @@ end
 module LwtConc =
 struct
   include Sqlexpr_concurrency.Lwt
-  let run x = Lwt_unix.run (Lwt.pick [x; Lwt_unix.timeout 1.0])
+  let run x = Lwt_main.run (Lwt.pick [x; Lwt_unix.timeout 1.0])
   let iter = Lwt_list.iter_s
 end
 
