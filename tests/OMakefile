@@ -5,13 +5,13 @@ EXTENSIONS = $(ROOT)/src/syntax/pa_sql.cmo $(ROOT)/src/ppx/ppx_sqlexpr
 .SCANNER: scan-ocaml-%.mli: %.mli $(EXTENSIONS)
 
 OCAMLINCLUDES += $(ROOT)/src
+OCAML_LIBS[] += $(ROOT)/src/sqlexpr
 
 section
-    OCAMLFINDFLAGS += -syntax camlp4o -ppopt $(ROOT)/src/syntax/pa_sql.cmo
     OCAMLPACKS[] += oUnit
-    OCAML_LIBS[] += $(ROOT)/src/sqlexpr
-
+    OCAMLFINDFLAGS += -syntax camlp4o -ppopt $(ROOT)/src/syntax/pa_sql.cmo
     OCamlProgram(t_sqlexpr_sqlite, t_sqlexpr_sqlite)
+    $(addsuffixes .o .cmx .cmi .cmo, t_sqlexpr_sqlite):
 
 section
     OCAMLPACKS[] =
