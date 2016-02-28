@@ -205,7 +205,7 @@ struct
     let db1   = S.open_db fname in
     let db2   = S.open_db fname in
 
-      S.execute db1 sqlc"CREATE TABLE foo(id INTEGER PRIMARY KEY)" >>= fun () ->
+    S.execute db1 [%sqlc "CREATE TABLE foo(id INTEGER PRIMARY KEY)"] >>= fun () ->
       (* these 2 TXs are serialized because they are EXCLUSIVE *)
       let%lwt _   = S.transaction ~kind:`EXCLUSIVE db1 (insert 1)
       and _   = S.transaction ~kind:`EXCLUSIVE db2 (insert 2) in
@@ -222,7 +222,7 @@ struct
         let%lwt count, sum' =
           S.fold db
             (fun (count, sum) n -> return (count + 1, sum + n))
-            (0, 0) sqlc"SELECT @d{n} FROM foo"
+            (0, 0) [%sqlc "SELECT @d{n} FROM foo"]
         in
           aeq_int ~msg:"fold: number of elements" (List.length l) count;
           aeq_int ~msg:"fold: sum of elements" sum sum';
@@ -231,7 +231,7 @@ struct
           let%lwt () =
             S.iter db
               (fun n -> incr count; sum' := !sum' + n; return ())
-              sqlc"SELECT @d{n} FROM foo"
+              [%sqlc "SELECT @d{n} FROM foo"]
           in
             aeq_int ~msg:"iter: number of elements" (List.length l) !count;
             aeq_int ~msg:"iter: sum of elements" sum !sum';
@@ -309,19 +309,21 @@ struct
     ]
 end
 
+open Lwt.Infix
+
 let test_lwt_recursive_mutex () =
   let module M = Sqlexpr_concurrency.Lwt in
   let mv = Lwt_mvar.create () in
   let m = M.create_recursive_mutex () in
   let l = ref [] in
-  let push x = l := x :: !l; return () in
-  let%lwt n = M.with_lock m (fun () -> M.with_lock m (fun () -> return 42)) in
+  let push x = l := x :: !l; Lwt.return () in
+  let%lwt n = M.with_lock m (fun () -> M.with_lock m (fun () -> Lwt.return 42)) in
     aeq_int 42 n;
     let t1 = M.with_lock m (fun () -> push 1 >>= fun () -> Lwt_mvar.take mv >>= fun () -> push 2) in
     let t2 = M.with_lock m (fun () -> push 3) in
     let%lwt () = Lwt.join [ t1; t2; Lwt_mvar.put mv () ] in
       aeq_list ~printer:string_of_int [3; 2; 1] !l;
-      return ()
+      Lwt.return ()
 
 module type S_LWT = Sqlexpr_sqlite.S with type 'a result = 'a Lwt.t
 
@@ -336,10 +338,10 @@ let with_db
   let db = S.open_db file in
   let%lwt () = try%lwt
       f db x
-  with _ -> return () in
+  with _ -> Lwt.return () in
   S.close_db db;
   if not in_mem then Sys.remove file;
-  return ()
+  Lwt.return ()
 
 let test_exclusion (type a)
       ((module S : S_LWT with type db = a) as s) () =
@@ -365,7 +367,7 @@ let test_exclusion (type a)
                      Lwt.wakeup u1 ();
                      let%lwt () = t2 in
                        Lwt.wakeup u3 ();
-                       return ()
+                       Lwt.return ()
                    end
       in
         th1 <&> th2 <&> th3 in
@@ -379,9 +381,9 @@ let test_exclusion (type a)
             assert_failure "More than one TX in critical region at a time";
 
           Lwt_unix.sleep 0.005
-        with _ -> return () in
+        with _ -> Lwt.return () in
         decr inside;
-        return ()
+        Lwt.return ()
       in
         Lwt.join (Sqlexpr_utils.List.init 1 (fun _ -> S.transaction db check))
     in
