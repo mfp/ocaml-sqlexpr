@@ -431,6 +431,47 @@ struct
 
   let raise_error (worker, _) ?sql ?params ?errmsg errcode =
     raise_error worker ?sql ?params ?errmsg errcode
+
+  type 'a ret = OK of 'a | Error of exn
+
+  let read_rows ~fname (worker, stmt) ~sql params ~cols read =
+    let open Sqlexpr_sqlite.Types in
+
+    detach worker
+      (fun dbh () ->
+         let rec read_rows_loop n l =
+           if n <= 0 then Batch_partial (List.rev l)
+           else
+             match Stmt.step stmt with
+               | Sqlite3.Rc.ROW -> begin
+                   let data  = Stmt.row_data stmt in
+                   let cols' = Array.length data in
+                     if cols' <> cols then
+                       let msg =
+                         sprintf
+                           "Sqlexpr_sqlite.%s: wrong number of columns \
+                            (expected %d, got %d) in SQL: %s" fname cols cols' sql
+                       in
+                         Batch_error (List.rev l, Failure msg)
+                     else
+                       match try OK (read data) with exn -> Error exn with
+                         | OK row -> read_rows_loop (n - 1) (row :: l)
+                         | Error exn -> Batch_error (List.rev l, exn)
+                 end
+               | Sqlite3.Rc.DONE -> Batch_complete (List.rev l)
+               | rc ->
+                   let errmsg = Sqlite3.errmsg dbh in
+                   let exn    =
+                     try
+                       let _ = do_raise_error ~sql ~params ~errmsg rc in Exit
+                     with exn -> exn
+                   in
+                     Batch_error (List.rev l, exn)
+         in
+           read_rows_loop 1000 [])
+      ()
+
+  let read_rows = Some read_rows
 end
 
 include Sqlexpr_sqlite.Make_gen(CONC)(POOL)

@@ -4,6 +4,11 @@
 module Types : sig
   (** Type used internally. *)
   type st = Sqlite3.Data.t list * int * string * string option
+
+  type 'a row_batch =
+    | Batch_complete of 'a list
+    | Batch_partial of 'a list
+    | Batch_error of 'a list * exn
 end
 
 type st = Types.st
@@ -166,8 +171,19 @@ sig
   val fold :
     db -> ('a -> 'b -> 'a result) -> 'a -> ('c, 'b, 'a result) expression -> 'c
 
+  (** Same as {!fold}, but faster for some pool implementations because it
+    * reads several rows at a time. *)
+  val fold_batch :
+    db -> ('a -> 'b -> 'a result) -> 'a -> ('c, 'b, 'a result) expression -> 'c
+
   (** Iterate through the rows returned for the supplied expression. *)
   val iter : db -> ('a -> unit result) -> ('b, 'a, unit result) expression -> 'b
+
+  (** Iterate through the rows returned for the supplied expression.
+    * For some worker pool implementations, this operation is faster then
+    * {!iter} because several rows are read at a time (e.g., without detaching
+    * each "next" operation). *)
+  val iter_batch : db -> ('a -> unit result) -> ('b, 'a, unit result) expression -> 'b
 
   (** Module used by the code generated for SQL literals. *)
   module Directives :
@@ -259,6 +275,10 @@ sig
   val steal_worker : db -> (db -> 'a result) -> 'a result
 
   val transaction_key : db -> unit TLS.key
+
+  val read_rows :
+    (fname:string -> stmt -> sql:string -> Sqlite3.Data.t list ->
+     cols:int -> (Sqlite3.Data.t array -> 'b) -> 'b Types.row_batch result) option
 end
 
 module Make_gen :
