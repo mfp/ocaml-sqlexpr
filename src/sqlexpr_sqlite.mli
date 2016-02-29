@@ -138,6 +138,7 @@ sig
       A [SQLITE_BUSY] (or any other) error code in any other operation inside
       a transaction will result in an [Error (_, Sqlite_error (code, _))]
       exception being thrown, and a rollback performed.
+      Refer to {!set_retry_on_busy}.
 
       One consequence of this is that concurrency control is very simple if
       you use [`EXCLUSIVE] transactions: the code can be written
