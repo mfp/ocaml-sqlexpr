@@ -19,16 +19,20 @@ struct
   let run label =
     let db    = S.open_db ~init ":memory:" in
     let n     = ref 0 in
-    let iters = 100_000 in
-      for_lwt i = 1 to iters do
+    let rows  = 10_000 in
+    let iters = 500 in
+      for_lwt i = 1 to rows do
         S.execute db sqlc"INSERT INTO foo(v) VALUES(%s)" (string_of_int i)
       done >>
       let () = Gc.major () in
       let t0 = Unix.gettimeofday () in
-        S.iter db (fun s -> n := !n + String.length s; return_unit)
-            sqlc"SELECT @s{v} FROM foo" >>
+        for_lwt i = 1 to iters do
+          S.iter db (fun s -> n := !n + String.length s; return_unit)
+              sqlc"SELECT @s{v} FROM foo"
+        done >>
         let dt = Unix.gettimeofday () -. t0 in
-          Lwt_io.printf "%s needed %5.2f (%.0f/s)\n" label dt (float iters /. dt)
+          Lwt_io.printf "%s needed %5.2f (%.0f/s)\n" label dt
+            (float (rows * iters) /. dt)
 end
 
 module DETACHED = BM(Sqlexpr_sqlite_lwt)
