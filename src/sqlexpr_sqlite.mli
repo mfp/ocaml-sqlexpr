@@ -102,12 +102,19 @@ sig
   (** "Select" a SELECT SQL expression and return a list of tuples; e.g.
        [select db sqlc"SELECT \@s\{name\}, \@s\{pass\} FROM users"]
        [select db sqlc"SELECT \@s\{pass\} FROM users WHERE id = %L" user_id]
+
+      If [batch] is not [1], some worker pool implementations might choose to
+      read multiple rows at a time to make the operation faster.
       *)
-  val select : db -> ('c, 'a, 'a list result) expression -> 'c
+  val select : db -> ?batch:int -> ('c, 'a, 'a list result) expression -> 'c
 
   (** [select_f db f expr ...] is similar to [select db expr ...] but maps the
-      results using the provided [f] function. *)
-  val select_f : db -> ('a -> 'b result) -> ('c, 'a, 'b list result) expression -> 'c
+      results using the provided [f] function.
+
+      If [batch] is not [1], some worker pool implementations might choose to
+      read multiple rows at a time to make the operation faster.
+      *)
+  val select_f : db -> ?batch:int -> ('a -> 'b result) -> ('c, 'a, 'b list result) expression -> 'c
 
   (** [select_one db expr ...] takes the first result from
       [select db expr ...].
@@ -167,24 +174,19 @@ sig
     (db -> 'a result) -> 'a result
 
   (** [fold db f a expr ...] is
-      [f (... (f (f a r1) r2) ...) rN]
-      where [rN] is the n-th row returned for the SELECT expression [expr]. *)
+    * [f (... (f (f a r1) r2) ...) rN]
+    * where [rN] is the n-th row returned for the SELECT expression [expr].
+    * If [batch] is not [1], some worker pool implementations might choose to
+    * read multiple rows at a time to make this operation faster.
+    * *)
   val fold :
-    db -> ('a -> 'b -> 'a result) -> 'a -> ('c, 'b, 'a result) expression -> 'c
-
-  (** Same as {!fold}, but faster for some pool implementations because it
-    * reads several rows at a time. *)
-  val fold_batch :
-    db -> ('a -> 'b -> 'a result) -> 'a -> ('c, 'b, 'a result) expression -> 'c
-
-  (** Iterate through the rows returned for the supplied expression. *)
-  val iter : db -> ('a -> unit result) -> ('b, 'a, unit result) expression -> 'b
+    db -> ?batch:int -> ('a -> 'b -> 'a result) -> 'a -> ('c, 'b, 'a result) expression -> 'c
 
   (** Iterate through the rows returned for the supplied expression.
-    * For some worker pool implementations, this operation is faster then
-    * {!iter} because several rows are read at a time (e.g., without detaching
-    * each "next" operation). *)
-  val iter_batch : db -> ('a -> unit result) -> ('b, 'a, unit result) expression -> 'b
+    * If [batch] is not [1], some worker pool implementations might choose to
+    * read multiple rows at a time to make this operation faster.
+    * *)
+  val iter : db -> ?batch:int -> ('a -> unit result) -> ('b, 'a, unit result) expression -> 'b
 
   (** Module used by the code generated for SQL literals. *)
   module Directives :
@@ -279,7 +281,7 @@ sig
 
   val read_rows :
     (fname:string -> stmt -> sql:string -> Sqlite3.Data.t list ->
-     cols:int -> (Sqlite3.Data.t array -> 'b) -> 'b Types.row_batch result) option
+     ?batch:int -> cols:int -> (Sqlite3.Data.t array -> 'b) -> 'b Types.row_batch result) option
 end
 
 module Make_gen :

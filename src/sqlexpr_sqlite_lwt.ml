@@ -434,8 +434,13 @@ struct
 
   type 'a ret = OK of 'a | Error of exn
 
-  let read_rows ~fname (worker, stmt) ~sql params ~cols read =
+  let bad_maxrows fname batch =
+    Invalid_argument (sprintf "Sqlexpr_sqlite.%s: bad batch size (%d)" fname batch)
+
+  let read_rows ~fname (worker, stmt) ~sql params ?(batch = 1000) ~cols read =
     let open Sqlexpr_sqlite.Types in
+
+    if batch < 0 then fail @@ bad_maxrows fname batch else
 
     detach worker
       (fun dbh () ->
@@ -468,7 +473,7 @@ struct
                    in
                      Batch_error (List.rev l, exn)
          in
-           read_rows_loop 1000 [])
+           read_rows_loop batch [])
       ()
 
   let read_rows = Some read_rows

@@ -25,7 +25,7 @@ struct
       done >>
       let () = Gc.major () in
       let t0 = Unix.gettimeofday () in
-        S.iter_batch db (fun s -> n := !n + String.length s; return_unit)
+        S.iter db (fun s -> n := !n + String.length s; return_unit)
             sqlc"SELECT @s{v} FROM foo" >>
         let dt = Unix.gettimeofday () -. t0 in
           Lwt_io.printf "%s needed %5.2f (%.0f/s)\n" label dt (float iters /. dt)
