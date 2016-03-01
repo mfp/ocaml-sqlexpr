@@ -125,21 +125,68 @@ let call_sqlcheck loc = function
   | _ -> raise (Location.Error(Location.error ~loc (
     "sqlcheck extension accepts \"sqlite\"")))
 
+let shared_exprs = Hashtbl.create 25
+
+let shared_expr_id = function
+  | Pexp_ident {txt} ->
+      let id = Longident.last txt in
+      if Hashtbl.mem shared_exprs id then Some id else None
+  | _ -> None
+
+let register_shared_expr =
+  let n = ref 0 in
+  fun expr ->
+    let id = "__ppx_sqlexpr_shared_" ^ string_of_int !n in
+    incr n;
+    Hashtbl.add shared_exprs id expr;
+    id
+
+let get_shared_expr = Hashtbl.find shared_exprs
+
+let shared_exprs = object
+  inherit [string list] Ppx_core.Ast_traverse.fold as super
+
+  method! expression e acc =
+    let acc = super#expression e acc in
+    match shared_expr_id e.pexp_desc with
+    | Some id -> id::acc
+    | None -> acc
+end
+
+let map_expr mapper loc expr =
+  let expr = mapper.Ast_mapper.expr mapper expr in
+  let ids = shared_exprs#expression expr [] in
+  with_default_loc loc (fun () ->
+    List.fold_left (fun acc id ->
+        [%expr let [%p AC.pvar id] = [%e get_shared_expr id] in [%e acc]])
+      expr ids)
+
 let new_mapper argv = Ast_mapper.({
   default_mapper with
-  expr = fun mapper expr ->
+  expr = (fun mapper expr ->
     match expr with
     (* is this an extension node? *)
     | {pexp_desc = Pexp_extension ({txt = "sql"; loc}, pstr)} ->
         call gen_sql loc pstr
     | {pexp_desc = Pexp_extension ({txt = "sqlc"; loc}, pstr)} ->
-        call (gen_sql ~cacheable:true) loc pstr
+        let expr = call (gen_sql ~cacheable:true) loc pstr in
+        let id = register_shared_expr expr in
+        Exp.ident ~loc {txt=Longident.Lident id; loc}
     | {pexp_desc = Pexp_extension ({txt = "sqlinit"; loc}, pstr)} ->
         call (gen_sql ~init:true) loc pstr
     | {pexp_desc = Pexp_extension ({txt = "sqlcheck"; loc}, pstr)} ->
         call_sqlcheck loc pstr
     (* Delegate to the default mapper *)
-    | x -> default_mapper.expr mapper x;
+    | x -> default_mapper.expr mapper x);
+  structure_item = (fun mapper structure_item ->
+    match structure_item with
+    | {pstr_desc = Pstr_value (rec_flag, value_bindings); pstr_loc} ->
+      (* since structure_item gets mapped before expr, need to preemptively
+       * apply our expr mapping to the value_bindings to resolve extensions *)
+      let es = List.map (fun x -> map_expr mapper pstr_loc x.pvb_expr) value_bindings in
+      let vbs = List.map2 (fun x y -> {x with pvb_expr = y}) value_bindings es in
+      { structure_item with pstr_desc = Pstr_value (rec_flag, vbs)}
+    | x -> default_mapper.structure_item mapper x);
 })
 
 let () =
