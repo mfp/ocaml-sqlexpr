@@ -62,9 +62,11 @@ Library "ppx"
 Executable "ppx_sqlexpr"
   Path:             src/ppx/
   MainIs:           ppx_sqlexpr.ml
-  BuildDepends:     unix, re.pcre, compiler-libs.common, ppx_tools.metaquot
+  BuildDepends:     unix, re.pcre, compiler-libs.common, ppx_tools.metaquot, ppx_core, ppx_driver
   CompiledObject:   best
   Install:          true
+  ByteOpt:          -predicates ppx_driver
+  NativeOpt:        -predicates ppx_driver
 
 Executable "example"
   Path:             tests/
