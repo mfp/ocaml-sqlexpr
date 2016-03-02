@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: 8c33eb34542ae662c8d9b52b2978ec0d)
+# DO NOT EDIT (digest: f5905681661b090fb1b90f7dc5c9e678)
 # Ignore VCS directories, you can use the same kind of rule outside
 # OASIS_START/STOP if you want to exclude directories that contains
 # useless stuff for the build process
@@ -32,11 +32,19 @@ true: annot, bin_annot
 # Library ppx
 "src/ppx/ppx.cmxs": use_ppx
 # Executable ppx_sqlexpr
+<src/ppx/ppx_sqlexpr.{native,byte}>: oasis_executable_ppx_sqlexpr_byte
+<src/ppx/*.ml{,i,y}>: oasis_executable_ppx_sqlexpr_byte
+<src/ppx/ppx_sqlexpr.{native,byte}>: oasis_executable_ppx_sqlexpr_native
+<src/ppx/*.ml{,i,y}>: oasis_executable_ppx_sqlexpr_native
 <src/ppx/ppx_sqlexpr.{native,byte}>: pkg_compiler-libs.common
+<src/ppx/ppx_sqlexpr.{native,byte}>: pkg_ppx_core
+<src/ppx/ppx_sqlexpr.{native,byte}>: pkg_ppx_driver
 <src/ppx/ppx_sqlexpr.{native,byte}>: pkg_ppx_tools.metaquot
 <src/ppx/ppx_sqlexpr.{native,byte}>: pkg_re.pcre
 <src/ppx/ppx_sqlexpr.{native,byte}>: pkg_unix
 <src/ppx/*.ml{,i,y}>: pkg_compiler-libs.common
+<src/ppx/*.ml{,i,y}>: pkg_ppx_core
+<src/ppx/*.ml{,i,y}>: pkg_ppx_driver
 <src/ppx/*.ml{,i,y}>: pkg_ppx_tools.metaquot
 <src/ppx/*.ml{,i,y}>: pkg_re.pcre
 <src/ppx/*.ml{,i,y}>: pkg_unix
