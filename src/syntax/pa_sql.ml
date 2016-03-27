@@ -278,7 +278,7 @@ let _ =
     (fun ctx _loc str -> expand_sql_literal ~cacheable:false ctx _loc str);
   register_expr_specifier "sqlinit"
     (fun ctx _loc str ->
-       expand_sql_literal ~is_init:true ~cacheable:false ctx _loc str);
+       expand_sql_literal ~is_init:true ~cacheable:true ctx _loc str);
   register_expr_specifier "sqlc"
     (fun ctx _loc str ->
        let expr = expand_sql_literal ~cacheable:true ctx _loc str in
