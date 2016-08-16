@@ -33,10 +33,10 @@ let test_sql _ =
   let s = pq [%sql "@s@s %d@s{abc}%d@s%d@s%d{def}%d{ghi}@s"] in
   ae "@s@s ?abc?@s?@s?{def}?{ghi}@s" s;
 
-  (* column name is not alphanumeric so leave as-is (only dots are allowed) *)
+  (* check that outputs are preserved, even if non-alphanumeric *)
   (* also check that whitespace is preserved *)
-  let s = pqi [%sql "@s{:kilroy}     @@was %@{here}"] in
-  ae "@s{:kilroy}     @@was %@{here}" s;
+  let s = pq [%sql "@s{:kilroy}     @@was %@{here}"] in
+  ae ":kilroy     @@was %@{here}" s;
 
   (* interpolation inside outputs should be allowed *)
   let s = pq [%sql "select @d{%d}"] in
@@ -45,6 +45,10 @@ let test_sql _ =
   (* allow some other non-alphanumeric characters *)
   let s = pq [%sql "select @d{COUNT(*)} FROM foo"] in
   ae "select COUNT(*) FROM foo" s;
+
+  (* allow spaces inside outputs *)
+  let s = pq [%sql "@d{count (*)}"] in
+  ae "count (*)" s;
 
   let s = pqi [%sql "excellent"] in
   ae "excellent" s
@@ -66,7 +70,11 @@ let test_quotes _ =
 
   (* more nested and unbalanced quotes *)
   let s = pqi [%sql {|"'%d'" %d '"%d"' "'%d"'|}] in
-  ae {|"'%d'" ? '"%d"' "'%d"'|} s
+  ae {|"'%d'" ? '"%d"' "'%d"'|} s;
+
+  (* allow a quoted 'column' name *)
+  let s = pq [%sql {|@s{'hello'}|}] in
+  ae {|'hello'|} s
 
 
 let tests =
