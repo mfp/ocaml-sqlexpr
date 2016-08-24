@@ -1,4 +1,4 @@
-OASISFormat: 0.3
+OASISFormat: 0.4
 Name:        ocaml-sqlexpr
 Version:     0.7.0
 Synopsis:    Type-safe, convenient SQLite database access.
@@ -8,6 +8,9 @@ License:     LGPL-2.1 with OCaml linking exception
 Plugins:     DevFiles (0.3), META (0.3)
 BuildTools:  ocamlbuild
 Homepage:    http://github.com/mfp/ocaml-sqlexpr
+OCamlVersion: >= 4.01
+AlphaFeatures: ocamlbuild_more_args
+XOCamlbuildPluginTags: package(cppo_ocamlbuild)
 Description:
   Minimalistic library and syntax extension for type-safe, convenient execution
   of SQL statements. Currently compatible with Sqlite3.

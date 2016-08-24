@@ -22,8 +22,12 @@ OCAMLDEP_MODULES_ENABLED = false
             $(mapprefix -I, $(OCAMLINCLUDES)) \
             $(OCAMLFLAGS) $(OCAMLCFLAGS) -i $< > $@
 
-%.ml: %.cppo_ml
-    cppo -o $@ -V "OCAML:$(shell $(OCAMLFIND) ocamlc -version)" $<
+public.Cppo(file) =
+    $(file).ml: $(file).cppo.ml
+        cppo -o $@ -V "OCAML:$(shell $(OCAMLFIND) ocamlc -version)" $<
+    return $(file).ml
+
+Cppo(src/ppx/ppx_sqlexpr)
 
 .SUBDIRS: src tests
 
@@ -42,6 +46,7 @@ section
     release:
         git checkout -b $(BRANCH)
 	oasis setup
+	echo "let () = Ocamlbuild_plugin.dispatch (fun hook -> Ocamlbuild_cppo.dispatcher hook)" >> myocamlbuild.ml
 	git add -f src/META sqlexpr.odocl Makefile _tags configure \
 	    myocamlbuild.ml setup.ml \
 	    src/sqlexpr.mllib src/syntax/sqlexpr_syntax.mllib src/ppx/ppx.mllib
@@ -51,3 +56,5 @@ section
 	gzip $(NAME).tar
 	git checkout master
 	git branch -D $(BRANCH)
+
+# vim: set sw=4 et:
