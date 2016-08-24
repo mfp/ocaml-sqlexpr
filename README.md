@@ -37,9 +37,18 @@ See also the example file `example.ml`.
 
 ## Dependencies
 
-csv, sqlite3, estring, lwt (>= 2.2.0), lwt.syntax, lwt.unix,
-unix, threads, re, ppx_tools
-
+* camlp4
+* cppo
+* csv
+* estring
+* lwt (>= 2.2.0)
+* lwt.syntax
+* lwt.unix
+* ppx_tools
+* re
+* sqlite3
+* threads
+* unix
 
 ## Camlp4 syntax extension
 

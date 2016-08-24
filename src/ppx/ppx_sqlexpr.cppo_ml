@@ -74,7 +74,11 @@ let gen_sql ?(init=false) ?(cacheable=false) str =
   else gen_expr ~cacheable sql inp outp
 
 let sqlcheck_sqlite () =
+#if OCAML_VERSION >= (4, 3, 0)
+  let mkstr s = Exp.constant (Pconst_string (s, None)) in
+#else
   let mkstr s = Exp.constant (Const_string (s, None)) in
+#endif
   let statement_check = [%expr
     try ignore(Sqlite3.prepare db stmt)
     with Sqlite3.Error s ->
@@ -113,14 +117,22 @@ let sqlcheck_sqlite () =
 
 let call fn loc = function
   | PStr [ {pstr_desc = Pstr_eval (
+#if OCAML_VERSION >= (4, 3, 0)
+    { pexp_desc = Pexp_constant(Pconst_string(sym, _))}, _)} ] ->
+#else
     { pexp_desc = Pexp_constant(Const_string(sym, _))}, _)} ] ->
+#endif
       with_default_loc loc (fun () -> fn sym)
   | _ -> raise (Location.Error(Location.error ~loc (
     "sqlexpr extension accepts a string")))
 
 let call_sqlcheck loc = function
   | PStr [ {pstr_desc = Pstr_eval ({ pexp_desc =
+#if OCAML_VERSION >= (4, 3, 0)
+    Pexp_constant(Pconst_string("sqlite", None))}, _)}] ->
+#else
     Pexp_constant(Const_string("sqlite", None))}, _)}] ->
+#endif
       with_default_loc loc sqlcheck_sqlite
   | _ -> raise (Location.Error(Location.error ~loc (
     "sqlcheck extension accepts \"sqlite\"")))
@@ -145,3 +157,5 @@ let new_mapper argv = Ast_mapper.({
 let () =
   Random.self_init ();
   Ast_mapper.register "sqlexpr" new_mapper
+
+(* vim: set ft=ocaml: *)

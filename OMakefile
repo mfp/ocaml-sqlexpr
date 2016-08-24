@@ -17,10 +17,13 @@ OCAMLFLAGS     = -thread -bin-annot -g -w +a-4-6-9-27..29-32..99 -warn-error -a
 OCAMLDEP_MODULES_ENABLED = false
 
 %.sig: %.ml %.cmo
-        $(OCAMLFIND) $(OCAMLC) -package $(concat \,, $(OCAMLPACKS)) \
+        $(OCAMLFIND) ocamlc -package $(concat \,, $(OCAMLPACKS)) \
 	    $(OCAMLFINDFLAGS) \
             $(mapprefix -I, $(OCAMLINCLUDES)) \
             $(OCAMLFLAGS) $(OCAMLCFLAGS) -i $< > $@
+
+%.ml: %.cppo_ml
+    cppo -o $@ -V "OCAML:$(shell $(OCAMLFIND) ocamlc -version)" $<
 
 .SUBDIRS: src tests
 
