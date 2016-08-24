@@ -18,10 +18,17 @@ Dependencies
 In order to compile this package, you will need:
 * ocaml
 * findlib
-* estring
+* camlp4
+* cppo
 * csv
+* estring
+* lwt (>= 2.2.0)
+* lwt.syntax
+* lwt.unix
+* ppx_tools
+* re
 * sqlite3
-* lwt
+* threads
 * unix
 
 Installing
