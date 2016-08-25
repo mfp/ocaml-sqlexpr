@@ -4,6 +4,11 @@
 module Types : sig
   (** Type used internally. *)
   type st = Sqlite3.Data.t list * int * string * string option
+
+  type 'a row_batch =
+    | Batch_complete of 'a list
+    | Batch_partial of 'a list
+    | Batch_error of 'a list * exn
 end
 
 type st = Types.st
@@ -97,12 +102,19 @@ sig
   (** "Select" a SELECT SQL expression and return a list of tuples; e.g.
        [select db sqlc"SELECT \@s\{name\}, \@s\{pass\} FROM users"]
        [select db sqlc"SELECT \@s\{pass\} FROM users WHERE id = %L" user_id]
+
+      If [batch] is not [1], some worker pool implementations might choose to
+      read multiple rows at a time to make the operation faster.
       *)
-  val select : db -> ('c, 'a, 'a list result) expression -> 'c
+  val select : db -> ?batch:int -> ('c, 'a, 'a list result) expression -> 'c
 
   (** [select_f db f expr ...] is similar to [select db expr ...] but maps the
-      results using the provided [f] function. *)
-  val select_f : db -> ('a -> 'b result) -> ('c, 'a, 'b list result) expression -> 'c
+      results using the provided [f] function.
+
+      If [batch] is not [1], some worker pool implementations might choose to
+      read multiple rows at a time to make the operation faster.
+      *)
+  val select_f : db -> ?batch:int -> ('a -> 'b result) -> ('c, 'a, 'b list result) expression -> 'c
 
   (** [select_one db expr ...] takes the first result from
       [select db expr ...].
@@ -133,6 +145,7 @@ sig
       A [SQLITE_BUSY] (or any other) error code in any other operation inside
       a transaction will result in an [Error (_, Sqlite_error (code, _))]
       exception being thrown, and a rollback performed.
+      Refer to {!set_retry_on_busy}.
 
       One consequence of this is that concurrency control is very simple if
       you use [`EXCLUSIVE] transactions: the code can be written
@@ -161,13 +174,19 @@ sig
     (db -> 'a result) -> 'a result
 
   (** [fold db f a expr ...] is
-      [f (... (f (f a r1) r2) ...) rN]
-      where [rN] is the n-th row returned for the SELECT expression [expr]. *)
+    * [f (... (f (f a r1) r2) ...) rN]
+    * where [rN] is the n-th row returned for the SELECT expression [expr].
+    * If [batch] is not [1], some worker pool implementations might choose to
+    * read multiple rows at a time to make this operation faster.
+    * *)
   val fold :
-    db -> ('a -> 'b -> 'a result) -> 'a -> ('c, 'b, 'a result) expression -> 'c
+    db -> ?batch:int -> ('a -> 'b -> 'a result) -> 'a -> ('c, 'b, 'a result) expression -> 'c
 
-  (** Iterate through the rows returned for the supplied expression. *)
-  val iter : db -> ('a -> unit result) -> ('b, 'a, unit result) expression -> 'b
+  (** Iterate through the rows returned for the supplied expression.
+    * If [batch] is not [1], some worker pool implementations might choose to
+    * read multiple rows at a time to make this operation faster.
+    * *)
+  val iter : db -> ?batch:int -> ('a -> unit result) -> ('b, 'a, unit result) expression -> 'b
 
   (** Module used by the code generated for SQL literals. *)
   module Directives :
@@ -259,6 +278,10 @@ sig
   val steal_worker : db -> (db -> 'a result) -> 'a result
 
   val transaction_key : db -> unit TLS.key
+
+  val read_rows :
+    (fname:string -> stmt -> sql:string -> Sqlite3.Data.t list ->
+     ?batch:int -> cols:int -> (Sqlite3.Data.t array -> 'b) -> 'b Types.row_batch result) option
 end
 
 module Make_gen :

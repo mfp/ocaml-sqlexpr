@@ -1,5 +1,6 @@
 
 .SUBDIRS: syntax
+    unsetenv(OCAMLFIND_TOOLCHAIN)
     NATIVE_ENABLED = false
     OCAMLPACKS[] = estring camlp4.quotations
     pa_sql.cmi pa_sql.cmo: pa_sql.ml

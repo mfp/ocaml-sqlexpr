@@ -40,7 +40,9 @@ struct
 
     and thread = {
       mutable thread : Thread.t;
-      task_channel : (int * (unit -> unit)) Event.channel;
+      pmutex : Mutex.t;
+      cv : Condition.t;
+      mutable tasks : (int * (unit -> unit)) list;
       mutex : Lwt_mutex.t;
     }
 
@@ -142,17 +144,31 @@ struct
       r
 
   let rec thread_loop thread =
-    let id, task = Event.sync (Event.receive thread.task_channel) in
-      task ();
-      Lwt_unix.send_notification id;
-      thread_loop thread
+
+    let rec wait_for_task thread =
+      match thread.tasks with
+        | [] ->
+            Condition.wait thread.cv thread.pmutex;
+            wait_for_task thread
+        | x :: tasks ->
+            thread.tasks <- tasks;
+            Mutex.unlock thread.pmutex;
+            x
+    in
+      Mutex.lock thread.pmutex;
+      let id, task = wait_for_task thread in
+        task ();
+        Lwt_unix.send_notification id;
+        thread_loop thread
 
   let make_thread () =
     let t =
       {
         thread = Thread.self ();
-        task_channel = Event.new_channel ();
-        mutex = Lwt_mutex.create ();
+        pmutex = Mutex.create ();
+        cv     = Condition.create ();
+        tasks  = [];
+        mutex  = Lwt_mutex.create ();
       } in
       t.thread <- Thread.create thread_loop t;
       incr thread_count;
@@ -179,18 +195,19 @@ struct
              | `Success value ->
                  wakeup wakener value
              | `Failure exn ->
-                 wakeup_exn wakener exn)
-    in
+                 wakeup_exn wakener exn) in
+    let thread = worker.worker_thread in
       try_lwt
         WSet.remove worker.db.free_workers worker;
-        Lwt_mutex.with_lock worker.worker_thread.mutex
+        Lwt_mutex.with_lock thread.mutex
           (fun () ->
              try_lwt
                check_worker_finished worker;
                (* Send the id and the task to the worker: *)
-               Event.sync
-                 (Event.send worker.worker_thread.task_channel
-                    (id, (task worker.handle)));
+               Mutex.lock thread.pmutex;
+               thread.tasks <- (id, task worker.handle) :: thread.tasks;
+               Mutex.unlock thread.pmutex;
+               Condition.signal thread.cv;
                return ()
              with e -> wakeup_exn wakener e; return ()) >>
         waiter
@@ -414,6 +431,52 @@ struct
 
   let raise_error (worker, _) ?sql ?params ?errmsg errcode =
     raise_error worker ?sql ?params ?errmsg errcode
+
+  type 'a ret = OK of 'a | Error of exn
+
+  let bad_maxrows fname batch =
+    Invalid_argument (sprintf "Sqlexpr_sqlite.%s: bad batch size (%d)" fname batch)
+
+  let read_rows ~fname (worker, stmt) ~sql params ?(batch = 1000) ~cols read =
+    let open Sqlexpr_sqlite.Types in
+
+    if batch < 0 then fail @@ bad_maxrows fname batch else
+
+    detach worker
+      (fun dbh () ->
+         let rec read_rows_loop n l =
+           if n <= 0 then Batch_partial (List.rev l)
+           else
+             match Stmt.step stmt with
+               | Sqlite3.Rc.ROW -> begin
+                   let data  = Stmt.row_data stmt in
+                   let cols' = Array.length data in
+                     if cols' <> cols then
+                       let msg =
+                         sprintf
+                           "Sqlexpr_sqlite.%s: wrong number of columns \
+                            (expected %d, got %d) in SQL: %s" fname cols cols' sql
+                       in
+                         Batch_error (List.rev l, Failure msg)
+                     else
+                       match try OK (read data) with exn -> Error exn with
+                         | OK row -> read_rows_loop (n - 1) (row :: l)
+                         | Error exn -> Batch_error (List.rev l, exn)
+                 end
+               | Sqlite3.Rc.DONE -> Batch_complete (List.rev l)
+               | rc ->
+                   let errmsg = Sqlite3.errmsg dbh in
+                   let exn    =
+                     try
+                       let _ = do_raise_error ~sql ~params ~errmsg rc in Exit
+                     with exn -> exn
+                   in
+                     Batch_error (List.rev l, exn)
+         in
+           read_rows_loop batch [])
+      ()
+
+  let read_rows = Some read_rows
 end
 
 include Sqlexpr_sqlite.Make_gen(CONC)(POOL)

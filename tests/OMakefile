@@ -11,7 +11,8 @@ section
     OCAMLPACKS[] += oUnit
     OCAMLFINDFLAGS += -syntax camlp4o -ppopt $(ROOT)/src/syntax/pa_sql.cmo
     OCamlProgram(t_sqlexpr_sqlite, t_sqlexpr_sqlite)
-    $(addsuffixes .o .cmx .cmi .cmo, t_sqlexpr_sqlite):
+    OCamlProgram(bm_sqlexpr_sqlite_lwt, bm_sqlexpr_sqlite_lwt)
+    $(addsuffixes .o .cmx .cmi .cmo, bm_sqlexpr_sqlite_lwt t_sqlexpr_sqlite):
 
 section
     OCAMLPACKS[] =

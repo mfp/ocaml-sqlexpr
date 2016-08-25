@@ -48,6 +48,11 @@ module Types =
 struct
   (* (params, nparams, sql, stmt_id)  *)
   type st = (Sqlite3.Data.t list * int * string * string option)
+
+  type 'a row_batch =
+    | Batch_complete of 'a list
+    | Batch_partial of 'a list
+    | Batch_error of 'a list * exn
 end
 
 include Types
@@ -354,6 +359,10 @@ sig
   val steal_worker : db -> (db -> 'a result) -> 'a result
 
   val transaction_key : db -> unit TLS.key
+
+  val read_rows :
+    (fname:string -> stmt -> sql:string -> Sqlite3.Data.t list ->
+     ?batch:int -> cols:int -> (Sqlite3.Data.t array -> 'b) -> 'b row_batch result) option
 end
 
 module WT = Weak.Make(struct
@@ -549,6 +558,8 @@ struct
     raise_error (Stmt.db_handle stmt) ?sql ?params ?errmsg errcode
 
   module TLS = M
+
+  let read_rows = None
 end
 
 module type S =
@@ -582,8 +593,9 @@ sig
   val steal_worker : db -> (db -> 'a result) -> 'a result
   val execute : db -> ('a, unit result) statement -> 'a
   val insert : db -> ('a, int64 result) statement -> 'a
-  val select : db -> ('c, 'a, 'a list result) expression -> 'c
-  val select_f : db -> ('a -> 'b result) -> ('c, 'a, 'b list result) expression -> 'c
+
+  val select : db -> ?batch:int -> ('c, 'a, 'a list result) expression -> 'c
+  val select_f : db -> ?batch:int -> ('a -> 'b result) -> ('c, 'a, 'b list result) expression -> 'c
   val select_one : db -> ('c, 'a, 'a result) expression -> 'c
   val select_one_maybe : db -> ('c, 'a, 'a option result) expression -> 'c
   val select_one_f : db -> ('a -> 'b result) -> ('c, 'a, 'b result) expression -> 'c
@@ -595,8 +607,9 @@ sig
     (db -> 'a result) -> 'a result
 
   val fold :
-    db -> ('a -> 'b -> 'a result) -> 'a -> ('c, 'b, 'a result) expression -> 'c
-  val iter : db -> ('a -> unit result) -> ('b, 'a, unit result) expression -> 'b
+    db -> ?batch:int -> ('a -> 'b -> 'a result) -> 'a -> ('c, 'b, 'a result) expression -> 'c
+
+  val iter : db -> ?batch:int -> ('a -> unit result) -> ('b, 'a, unit result) expression -> 'b
 
   module Directives :
   sig
@@ -716,7 +729,17 @@ struct
            (expected %d, got %d) in SQL: %s" s expected actual
           expr.statement.sql_statement
 
-  let select_f db f expr =
+  let rec iter_s f = function
+    | [] -> return ()
+    | x :: tl -> f x >> iter_s f tl
+
+  let rec fold_left_s f acc = function
+    | [] -> return acc
+    | x :: tl ->
+        lwt acc = f acc x in
+          fold_left_s f acc tl
+
+  let select_f db ?batch f expr =
     do_select
       (fun stmt sql params ->
          let auto_yield = M.auto_yield 0.01 in
@@ -734,7 +757,33 @@ struct
       db
       expr.statement
 
-  let select db expr = select_f db (fun x -> return x) expr
+  let select_f = match POOL.read_rows with
+    | None -> select_f
+    | Some read_rows -> fun db ?batch f expr ->
+        do_select
+          (fun stmt sql params ->
+             let f acc x =
+               lwt y = f x in
+                 return (y :: acc) in
+
+             let rec loop_fold acc =
+               match_lwt
+                 read_rows
+                   ~fname:"select_f" stmt ~sql params
+                   ?batch ~cols:(fst expr.get_data) (snd expr.get_data)
+               with
+                 | Batch_complete l ->
+                     fold_left_s f acc l >>= fun l -> return (List.rev l)
+                 | Batch_partial l -> fold_left_s f acc l >>= loop_fold
+                 | Batch_error (l, exn) ->
+                     fold_left_s f acc l >>= fun _ ->
+                     fail exn
+             in
+               ensure_reset_stmt stmt loop_fold [])
+          db
+          expr.statement
+
+  let select db ?batch expr = select_f db ?batch (fun x -> return x) expr
 
   let select_one_f_aux db f not_found expr =
     do_select
@@ -821,7 +870,7 @@ struct
              fail e
          end)
 
-  let fold db f init expr =
+  let fold db ?batch f init expr =
     do_select
       (fun stmt sql params ->
          let auto_yield = M.auto_yield 0.01 in
@@ -840,7 +889,28 @@ struct
       db
       expr.statement
 
-  let iter db f expr =
+  let fold = match POOL.read_rows with
+    | None -> fold
+    | Some read_rows -> fun db ?batch f init expr ->
+        do_select
+          (fun stmt sql params ->
+             let rec loop_fold acc =
+               match_lwt
+                 read_rows
+                   ~fname:"fold" stmt ~sql params
+                   ?batch ~cols:(fst expr.get_data) (snd expr.get_data)
+               with
+                 | Batch_complete l -> fold_left_s f acc l
+                 | Batch_partial l -> fold_left_s f acc l >>= loop_fold
+                 | Batch_error (l, exn) ->
+                     fold_left_s f acc l >>
+                     fail exn
+             in
+               ensure_reset_stmt stmt loop_fold init)
+          db
+          expr.statement
+
+  let iter db ?batch f expr =
     do_select
       (fun stmt sql params ->
          let auto_yield = M.auto_yield 0.01 in
@@ -858,6 +928,27 @@ struct
          in ensure_reset_stmt stmt loop ())
       db
       expr.statement
+
+  let iter = match POOL.read_rows with
+    | None -> iter
+    | Some read_rows -> fun db ?batch f expr ->
+        do_select
+          (fun stmt sql params ->
+             let rec loop_iter () =
+               match_lwt
+                 read_rows
+                   ~fname:"iter" stmt ~sql params
+                   ?batch ~cols:(fst expr.get_data) (snd expr.get_data)
+               with
+                 | Batch_complete l -> iter_s f l
+                 | Batch_partial l -> iter_s f l >> loop_iter ()
+                 | Batch_error (l, exn) ->
+                     iter_s f l >>
+                     fail exn
+             in
+               ensure_reset_stmt stmt loop_iter ())
+          db
+          expr.statement
 end
 
 module Make(M : THREAD with type 'a key = 'a Lwt.key) = struct
