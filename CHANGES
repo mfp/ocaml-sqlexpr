@@ -1,0 +1,7 @@
+
+Changes since 0.6.0
+===================
+
+* PPX extension thanks to Josh Allmann
+* more efficient row iteration/selection (in batches) in Sqlexpr_sqlite_lwt
+* fix possible performance issue caused by the Event module
