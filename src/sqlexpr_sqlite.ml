@@ -279,11 +279,12 @@ struct
         None -> f ()
       | Some ch ->
           let t0 = Unix.gettimeofday () in
-          lwt ret =
-            try_lwt
-              lwt y = f () in
-                return (Ret y)
-            with e -> return (Exn e) in
+          let%lwt ret =
+            try%lwt
+              let%lwt y = f () in
+              return (Ret y)
+            with e -> return (Exn e)
+          in
           let dt = Unix.gettimeofday () -. t0 in
           let elapsed_time_us = int_of_float (1e6 *. dt) in
             (* the format used by PGOcaml *)
@@ -297,7 +298,7 @@ struct
              flush ch;
              match ret with
                  Ret r -> return r
-               | Exn e -> raise_lwt e
+               | Exn e -> Lwt.fail e
 
   (* accept a reversed list of params *)
   let profile_execute_sql sql ?(params = []) f =
@@ -414,7 +415,7 @@ struct
 
   let handle db =
     if db.thread_id <> curr_thread_id () then
-      try_lwt (raise_thread_error ~msg:"in IdentityPool.handle" db.thread_id)
+      [%lwt raise_thread_error ~msg:"in IdentityPool.handle" db.thread_id]
     else return db.handle
 
   let close_db db =
@@ -423,8 +424,9 @@ struct
         (fun stmt -> Stmt.finalize stmt)
         db.stmts;
       Stmt_cache.flush_stmts db.stmt_cache;
-      ignore begin try_lwt
-        lwt db = handle db in
+      ignore begin
+        try%lwt
+        let%lwt db = handle db in
           ignore (Sqlite3.db_close db);
           return ()
       with e -> (* FIXME: log? *) return ()
@@ -473,19 +475,20 @@ struct
   let rec run ?(retry_on_busy = !retry_on_busy) ?stmt ?sql ?params db f x = match f x with
       Sqlite3.Rc.OK | Sqlite3.Rc.ROW | Sqlite3.Rc.DONE as r -> return r
     | Sqlite3.Rc.BUSY when retry_on_busy ->
-        M.sleep 0.010 >> run ~retry_on_busy ?sql ?stmt ?params db f x
+        let%lwt () = M.sleep 0.010 in
+        run ~retry_on_busy ?sql ?stmt ?params db f x
     | code ->
         let errmsg = Sqlite3.errmsg db in
           Option.may (fun stmt -> ignore (Stmt.reset stmt)) stmt;
           raise_error db ?sql ?params ~errmsg code
 
   let check_ok ?retry_on_busy ?stmt ?sql ?params db f x =
-    lwt _ = run ?retry_on_busy ?stmt ?sql ?params db f x in return ()
+    let%lwt _ = run ?retry_on_busy ?stmt ?sql ?params db f x in return ()
 
   let prepare db f (params, nparams, sql, stmt_id) =
-    lwt dbh = handle db in
-    lwt stmt =
-      try_lwt
+    let%lwt dbh = handle db in
+    let%lwt stmt =
+      try%lwt
         match stmt_id with
             None ->
               profile_prepare_stmt sql
@@ -496,13 +499,13 @@ struct
           | Some id ->
               match Stmt_cache.find_remove_stmt db.stmt_cache id with
                 Some stmt ->
-                  begin try_lwt
+                  let%lwt () = begin try%lwt
                     check_ok ~stmt dbh Stmt.reset stmt
                   with e ->
                     (* drop the stmt *)
                     Stmt.finalize stmt;
                     fail e
-                  end >>
+                  end in
                   return stmt
               | None ->
                   profile_prepare_stmt sql
@@ -516,20 +519,20 @@ struct
         in raise_exn ~msg e in
     let rec iteri ?(i = 0) f = function
         [] -> return ()
-      | hd :: tl -> f i hd >> iteri ~i:(i + 1) f tl
+      | hd :: tl -> let%lwt () = f i hd in iteri ~i:(i + 1) f tl
     in
       (* the list of params is reversed *)
-      iteri
+      let%lwt () = iteri
         (fun n v -> check_ok ~sql ~stmt dbh (Stmt.bind stmt (nparams - n)) v)
-        params >>
+        params
+      in
       profile_execute_sql ~full_sql:sql sql ~params
         (fun () ->
-           try_lwt
-             f stmt sql params
-           finally
+           (f stmt sql params)[%finally
              match stmt_id with
                  Some id -> Stmt_cache.add_stmt db.stmt_cache id stmt; return ()
-               | None -> return ())
+               | None -> return ()
+           ])
 
   let borrow_worker db f = f db
 
@@ -543,7 +546,7 @@ struct
     run ?sql ?params ~stmt (Stmt.db_handle stmt) Stmt.step stmt
 
   let step_with_last_insert_rowid ?sql ?params stmt =
-    step ?sql ?params stmt >>
+    let%lwt _ = step ?sql ?params stmt in
     return (Sqlite3.last_insert_rowid (Stmt.db_handle stmt))
 
   let reset_with_errcode stmt = return (Stmt.reset stmt)
@@ -551,7 +554,7 @@ struct
   let row_data stmt = return (Stmt.row_data stmt)
 
   let unsafe_execute db ?retry_on_busy sql =
-    lwt dbh = handle db in
+    let%lwt dbh = handle db in
       check_ok ?retry_on_busy ~sql dbh (Sqlite3.exec dbh) sql
 
   let raise_error stmt ?sql ?params ?errmsg errcode =
@@ -700,16 +703,14 @@ struct
     p.directive (POOL.prepare db f) ([], 0, p.sql_statement, p.stmt_id)
 
   let ensure_reset_stmt stmt f x =
-    try_lwt
-      f x
-    finally
-      POOL.reset stmt
+    (f x)
+    [%finally POOL.reset stmt]
 
   let execute db (p : ('a, _ M.t) statement) =
     do_select
       (fun stmt sql params ->
          ensure_reset_stmt stmt
-           (fun () -> POOL.step ~sql ~params stmt >> return ()) ())
+           (fun () -> let%lwt _ = POOL.step ~sql ~params stmt in return ()) ())
       db p
 
   let insert db p =
@@ -731,12 +732,12 @@ struct
 
   let rec iter_s f = function
     | [] -> return ()
-    | x :: tl -> f x >> iter_s f tl
+    | x :: tl -> let%lwt () = f x in iter_s f tl
 
   let rec fold_left_s f acc = function
     | [] -> return acc
     | x :: tl ->
-        lwt acc = f acc x in
+        let%lwt acc = f acc x in
           fold_left_s f acc tl
 
   let select_f db ?batch f expr =
@@ -744,12 +745,12 @@ struct
       (fun stmt sql params ->
          let auto_yield = M.auto_yield 0.01 in
          let rec loop l =
-           auto_yield () >>
+           let%lwt () = auto_yield () in
            POOL.step stmt >>= function
                Sqlite3.Rc.ROW ->
-                 lwt data = POOL.row_data stmt in
-                 check_num_cols "select" stmt expr data >>
-                 lwt x = try_lwt f (snd expr.get_data data) in
+                 let%lwt data = POOL.row_data stmt in
+                 let%lwt () = check_num_cols "select" stmt expr data in
+                 let%lwt x = [%lwt f (snd expr.get_data data)] in
                    loop (x :: l)
              | Sqlite3.Rc.DONE -> return (List.rev l)
              | rc -> POOL.raise_error ~sql ~params stmt rc
@@ -763,11 +764,11 @@ struct
         do_select
           (fun stmt sql params ->
              let f acc x =
-               lwt y = f x in
+               let%lwt y = f x in
                  return (y :: acc) in
 
              let rec loop_fold acc =
-               match_lwt
+               match%lwt
                  read_rows
                    ~fname:"select_f" stmt ~sql params
                    ?batch ~cols:(fst expr.get_data) (snd expr.get_data)
@@ -791,8 +792,8 @@ struct
          ensure_reset_stmt stmt begin fun () ->
            POOL.step stmt >>= function
                Sqlite3.Rc.ROW ->
-                 lwt data = POOL.row_data stmt in
-                 try_lwt f (snd expr.get_data data)
+                 let%lwt data = POOL.row_data stmt in
+                 [%lwt f (snd expr.get_data data)]
              | Sqlite3.Rc.DONE -> not_found ()
              | rc -> POOL.raise_error ~sql ~params stmt rc
          end ())
@@ -810,7 +811,7 @@ struct
 
   let select_one_f_maybe db f expr =
     select_one_f_aux db
-      (fun x -> lwt y = f x in return (Some y)) (fun () -> return None) expr
+      (fun x -> let%lwt y = f x in return (Some y)) (fun () -> return None) expr
 
   let new_tx_id =
     let pid = Unix.getpid () in
@@ -828,7 +829,7 @@ struct
   let unsafe_execute_prof text db ?retry_on_busy fmt =
     ksprintf
       (fun sql ->
-         profile_prepare_stmt text (fun () -> return ()) >>
+         let%lwt () = profile_prepare_stmt text (fun () -> return ()) in
          profile_execute_sql ~full_sql:sql text (fun () -> POOL.unsafe_execute db ?retry_on_busy sql))
       fmt
 
@@ -842,31 +843,31 @@ struct
             | `IMMEDIATE -> "IMMEDIATE"
             | `EXCLUSIVE -> "EXCLUSIVE"
           in
-            unsafe_execute_prof ~retry_on_busy:true "BEGIN" db "BEGIN %s" tx_kind >>
-            match_lwt
-              try_lwt
-                lwt x = POOL.TLS.with_value
+            let%lwt () = unsafe_execute_prof ~retry_on_busy:true "BEGIN" db "BEGIN %s" tx_kind in
+            match%lwt
+              try%lwt
+                let%lwt x = POOL.TLS.with_value
                           (POOL.transaction_key db) (Some ()) (fun () -> f db)
                 in
                   return (`OK x)
               with exn -> return (`EXN exn)
             with
-              | `OK x -> unsafe_execute_prof ~retry_on_busy:true
-                           "COMMIT" db "COMMIT" >> return x
-              | `EXN exn -> unsafe_execute_prof "ROLLBACK" db "ROLLBACK" >> fail exn
+              | `OK x -> let%lwt () = unsafe_execute_prof ~retry_on_busy:true
+                           "COMMIT" db "COMMIT" in return x
+              | `EXN exn -> let%lwt () = unsafe_execute_prof "ROLLBACK" db "ROLLBACK" in fail exn
 
   let transaction db ?(kind = `DEFERRED) f =
     let txid = new_tx_id () in
       POOL.steal_worker db
         (outer_transaction_wrap ~kind begin fun db ->
-           unsafe_execute_prof "SAVEPOINT" db "SAVEPOINT %s" txid >>
-           try_lwt
-             lwt x = f db in
-               unsafe_execute_prof "RELEASE" db "RELEASE %s" txid >>
+          let%lwt () = unsafe_execute_prof "SAVEPOINT" db "SAVEPOINT %s" txid in
+           try%lwt
+             let%lwt x = f db in
+             let%lwt () = unsafe_execute_prof "RELEASE" db "RELEASE %s" txid in
                return x
            with e ->
-             unsafe_execute_prof "ROLLBACK" db "ROLLBACK TO %s" txid >>
-             unsafe_execute_prof "RELEASE" db "RELEASE %s" txid >>
+             let%lwt () = unsafe_execute_prof "ROLLBACK" db "ROLLBACK TO %s" txid in
+             let%lwt () = unsafe_execute_prof "RELEASE" db "RELEASE %s" txid in
              fail e
          end)
 
@@ -875,14 +876,14 @@ struct
       (fun stmt sql params ->
          let auto_yield = M.auto_yield 0.01 in
          let rec loop acc =
-           auto_yield () >>
+           let%lwt () = auto_yield () in
            POOL.step stmt >>= function
                Sqlite3.Rc.ROW ->
-                 begin try_lwt
-                   lwt data = POOL.row_data stmt in
-                   check_num_cols "fold" stmt expr data >>
+                 [%lwt
+                   let%lwt data = POOL.row_data stmt in
+                   let%lwt () = check_num_cols "fold" stmt expr data in
                    f acc (snd expr.get_data data)
-                 end >>= loop
+                 ] >>= loop
              | Sqlite3.Rc.DONE -> return acc
              | rc -> POOL.raise_error ~sql ~params stmt rc
          in ensure_reset_stmt stmt loop init)
@@ -895,7 +896,7 @@ struct
         do_select
           (fun stmt sql params ->
              let rec loop_fold acc =
-               match_lwt
+               match%lwt
                  read_rows
                    ~fname:"fold" stmt ~sql params
                    ?batch ~cols:(fst expr.get_data) (snd expr.get_data)
@@ -903,7 +904,7 @@ struct
                  | Batch_complete l -> fold_left_s f acc l
                  | Batch_partial l -> fold_left_s f acc l >>= loop_fold
                  | Batch_error (l, exn) ->
-                     fold_left_s f acc l >>
+                     let%lwt _ = fold_left_s f acc l in
                      fail exn
              in
                ensure_reset_stmt stmt loop_fold init)
@@ -915,14 +916,14 @@ struct
       (fun stmt sql params ->
          let auto_yield = M.auto_yield 0.01 in
          let rec loop () =
-           auto_yield () >>
+           let%lwt () = auto_yield () in
            POOL.step stmt >>= function
                Sqlite3.Rc.ROW ->
-                 begin try_lwt
-                   lwt data = POOL.row_data stmt in
-                   check_num_cols "iter" stmt expr data >>
+                 [%lwt
+                   let%lwt data = POOL.row_data stmt in
+                   let%lwt () = check_num_cols "iter" stmt expr data in
                    f (snd expr.get_data data)
-                 end >>= loop
+                 ] >>= loop
              | Sqlite3.Rc.DONE -> return ()
              | rc -> POOL.raise_error stmt ~sql ~params rc
          in ensure_reset_stmt stmt loop ())
@@ -935,15 +936,15 @@ struct
         do_select
           (fun stmt sql params ->
              let rec loop_iter () =
-               match_lwt
+               match%lwt
                  read_rows
                    ~fname:"iter" stmt ~sql params
                    ?batch ~cols:(fst expr.get_data) (snd expr.get_data)
                with
                  | Batch_complete l -> iter_s f l
-                 | Batch_partial l -> iter_s f l >> loop_iter ()
+                 | Batch_partial l -> iter_s f l >>= loop_iter
                  | Batch_error (l, exn) ->
-                     iter_s f l >>
+                     let%lwt () = iter_s f l in
                      fail exn
              in
                ensure_reset_stmt stmt loop_iter ())

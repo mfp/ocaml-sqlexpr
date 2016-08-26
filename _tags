@@ -67,6 +67,5 @@ true: annot, bin_annot
 <tests/*.ml{,i,y}>: use_sqlexpr_syntax
 # OASIS_STOP
 <src/*.ml{,i}>: thread
-<src/*.ml{,i}>: syntax(camlp4o)
 <src/syntax/*.ml{,i}>: syntax(camlp4o)
 "src/ppx/ppx_sqlexpr.ml": cppo_V_OCAML

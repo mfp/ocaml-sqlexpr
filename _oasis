@@ -40,7 +40,7 @@ Library sqlexpr
                     Sqlexpr_sqlite,
                     Sqlexpr_sqlite_lwt,
                     Sqlexpr_utils
-  BuildDepends:     csv, sqlite3, estring, lwt (>= 2.2.0), lwt.syntax, lwt.unix,
+  BuildDepends:     csv, sqlite3, lwt (>= 2.2.0), lwt.ppx, lwt.unix,
                     unix, threads
   XMETADescription: SQLite database access.
 
