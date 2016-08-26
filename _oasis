@@ -58,6 +58,7 @@ Library "ppx"
   Path:             src/ppx/
   FindlibName:      ppx
   FindlibParent:    sqlexpr
+  Modules:          Ppx_sqlexpr
   XMETADescription: PPX extension for SQL statements/expressions
   XMETARequires:    sqlexpr
   XMETAExtraLines:  ppx = "ppx_sqlexpr"
