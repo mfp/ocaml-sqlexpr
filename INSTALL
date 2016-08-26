@@ -26,7 +26,7 @@ In order to compile this package, you will need:
 * lwt.syntax
 * lwt.unix
 * ppx_tools
-* re
+* re (>= 1.3.0)
 * sqlite3
 * threads
 * unix
