@@ -4,7 +4,7 @@ authors: ["Mauricio Fernandez <mfp@acm.org>"]
 homepage: "http://github.com/mfp/ocaml-sqlexpr"
 license: "LGPL-2.1 with OCaml linking exception"
 build: [
-  ["ocaml" "setup.ml" "-configure" "--prefix" prefix]
+  ["ocaml" "setup.ml" "-configure" "--prefix" prefix "--%{estring:enable}%-camlp4"]
   ["ocaml" "setup.ml" "-build"]
 ]
 install:[
@@ -14,14 +14,17 @@ build-doc: [["ocaml" "setup.ml" "-doc"]]
 remove: [["ocamlfind" "remove" "sqlexpr"]]
 depends: [
   "ppx_tools"
-  "estring"
   "csv"
   "lwt" {>= "2.2.0"}
   "ocamlfind"
   ("sqlite3" {>= "2.0.4"} | "sqlite3" {= "2.0.3"})
   "base-unix"
+  "re"
   "ocamlbuild" {build}
   "cppo" {build}
+]
+depopts: [
+  "estring"
 ]
 dev-repo: "https://github.com/mfp/ocaml-sqlexpr.git"
 bug-reports: "https://github.com/mfp/ocaml-sqlexpr/issues"

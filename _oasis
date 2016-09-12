@@ -8,7 +8,7 @@ License:     LGPL-2.1 with OCaml linking exception
 Plugins:     DevFiles (0.3), META (0.3)
 BuildTools:  ocamlbuild
 Homepage:    http://github.com/mfp/ocaml-sqlexpr
-OCamlVersion: >= 4.01
+OCamlVersion: >= 4.02
 AlphaFeatures: ocamlbuild_more_args
 XOCamlbuildPluginTags: package(cppo_ocamlbuild)
 Description:
@@ -33,6 +33,10 @@ SourceRepository github
   Type:     git
   Location: git://github.com/mfp/ocaml-sqlexpr.git
 
+Flag camlp4
+  Description:      Build sqlexpr with camlp4 syntax extensions
+  Default:          true
+
 Library sqlexpr
   Path:             src
   BuildTools:       ocamlbuild
@@ -49,6 +53,7 @@ Library "sqlexpr_syntax"
   FindlibName:      syntax
   FindlibParent:    sqlexpr
   Modules:          Pa_sql
+  Build$:           flag(camlp4)
   BuildDepends:     camlp4.lib, camlp4.quotations.r, estring
   XMETADescription: Syntax extension for SQL statements/expressions
   XMETAType:        syntax
