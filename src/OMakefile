@@ -1,12 +1,12 @@
 
 .SUBDIRS: syntax
     unsetenv(OCAMLFIND_TOOLCHAIN)
+    OCAMLFINDFLAGS = -syntax camlp4o
     NATIVE_ENABLED = false
     OCAMLPACKS[] = estring camlp4.quotations
     pa_sql.cmi pa_sql.cmo: pa_sql.ml
 
 .SUBDIRS: ppx
-    OCAMLFINDFLAGS =
     OCAMLPACKS[]   = compiler-libs.common ppx_tools.metaquot re.pcre unix
     OCamlProgram(ppx_sqlexpr, sqlexpr_parser ppx_sqlexpr)
 

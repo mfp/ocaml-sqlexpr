@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: 8c33eb34542ae662c8d9b52b2978ec0d)
+# DO NOT EDIT (digest: d89a93f25aa57937466d3bcf30b0954f)
 # Ignore VCS directories, you can use the same kind of rule outside
 # OASIS_START/STOP if you want to exclude directories that contains
 # useless stuff for the build process
@@ -16,57 +16,55 @@ true: annot, bin_annot
 "_darcs": not_hygienic
 # Library sqlexpr
 "src/sqlexpr.cmxs": use_sqlexpr
-<src/*.ml{,i,y}>: pkg_csv
-<src/*.ml{,i,y}>: pkg_estring
-<src/*.ml{,i,y}>: pkg_lwt
-<src/*.ml{,i,y}>: pkg_lwt.syntax
-<src/*.ml{,i,y}>: pkg_lwt.unix
-<src/*.ml{,i,y}>: pkg_sqlite3
-<src/*.ml{,i,y}>: pkg_threads
-<src/*.ml{,i,y}>: pkg_unix
+<src/*.ml{,i,y}>: package(csv)
+<src/*.ml{,i,y}>: package(lwt)
+<src/*.ml{,i,y}>: package(lwt.ppx)
+<src/*.ml{,i,y}>: package(lwt.unix)
+<src/*.ml{,i,y}>: package(sqlite3)
+<src/*.ml{,i,y}>: package(threads)
+<src/*.ml{,i,y}>: package(unix)
 # Library sqlexpr_syntax
 "src/syntax/sqlexpr_syntax.cmxs": use_sqlexpr_syntax
-<src/syntax/*.ml{,i,y}>: pkg_camlp4.lib
-<src/syntax/*.ml{,i,y}>: pkg_camlp4.quotations.r
-<src/syntax/*.ml{,i,y}>: pkg_estring
+<src/syntax/*.ml{,i,y}>: package(camlp4.lib)
+<src/syntax/*.ml{,i,y}>: package(camlp4.quotations.r)
+<src/syntax/*.ml{,i,y}>: package(estring)
 # Library ppx
 "src/ppx/ppx.cmxs": use_ppx
 # Executable ppx_sqlexpr
-<src/ppx/ppx_sqlexpr.{native,byte}>: pkg_compiler-libs.common
-<src/ppx/ppx_sqlexpr.{native,byte}>: pkg_ppx_tools.metaquot
-<src/ppx/ppx_sqlexpr.{native,byte}>: pkg_re.pcre
-<src/ppx/ppx_sqlexpr.{native,byte}>: pkg_unix
-<src/ppx/*.ml{,i,y}>: pkg_compiler-libs.common
-<src/ppx/*.ml{,i,y}>: pkg_ppx_tools.metaquot
-<src/ppx/*.ml{,i,y}>: pkg_re.pcre
-<src/ppx/*.ml{,i,y}>: pkg_unix
+<src/ppx/ppx_sqlexpr.{native,byte}>: package(compiler-libs.common)
+<src/ppx/ppx_sqlexpr.{native,byte}>: package(ppx_tools.metaquot)
+<src/ppx/ppx_sqlexpr.{native,byte}>: package(re.pcre)
+<src/ppx/ppx_sqlexpr.{native,byte}>: package(unix)
+<src/ppx/*.ml{,i,y}>: package(compiler-libs.common)
+<src/ppx/*.ml{,i,y}>: package(ppx_tools.metaquot)
+<src/ppx/*.ml{,i,y}>: package(re.pcre)
+<src/ppx/*.ml{,i,y}>: package(unix)
 # Executable example
-<tests/example.{native,byte}>: pkg_camlp4.lib
-<tests/example.{native,byte}>: pkg_camlp4.quotations.r
-<tests/example.{native,byte}>: pkg_csv
-<tests/example.{native,byte}>: pkg_estring
-<tests/example.{native,byte}>: pkg_lwt
-<tests/example.{native,byte}>: pkg_lwt.syntax
-<tests/example.{native,byte}>: pkg_lwt.unix
-<tests/example.{native,byte}>: pkg_sqlite3
-<tests/example.{native,byte}>: pkg_threads
-<tests/example.{native,byte}>: pkg_unix
+<tests/example.{native,byte}>: package(camlp4.lib)
+<tests/example.{native,byte}>: package(camlp4.quotations.r)
+<tests/example.{native,byte}>: package(csv)
+<tests/example.{native,byte}>: package(estring)
+<tests/example.{native,byte}>: package(lwt)
+<tests/example.{native,byte}>: package(lwt.ppx)
+<tests/example.{native,byte}>: package(lwt.unix)
+<tests/example.{native,byte}>: package(sqlite3)
+<tests/example.{native,byte}>: package(threads)
+<tests/example.{native,byte}>: package(unix)
 <tests/example.{native,byte}>: use_sqlexpr
 <tests/example.{native,byte}>: use_sqlexpr_syntax
-<tests/*.ml{,i,y}>: pkg_camlp4.lib
-<tests/*.ml{,i,y}>: pkg_camlp4.quotations.r
-<tests/*.ml{,i,y}>: pkg_csv
-<tests/*.ml{,i,y}>: pkg_estring
-<tests/*.ml{,i,y}>: pkg_lwt
-<tests/*.ml{,i,y}>: pkg_lwt.syntax
-<tests/*.ml{,i,y}>: pkg_lwt.unix
-<tests/*.ml{,i,y}>: pkg_sqlite3
-<tests/*.ml{,i,y}>: pkg_threads
-<tests/*.ml{,i,y}>: pkg_unix
+<tests/*.ml{,i,y}>: package(camlp4.lib)
+<tests/*.ml{,i,y}>: package(camlp4.quotations.r)
+<tests/*.ml{,i,y}>: package(csv)
+<tests/*.ml{,i,y}>: package(estring)
+<tests/*.ml{,i,y}>: package(lwt)
+<tests/*.ml{,i,y}>: package(lwt.ppx)
+<tests/*.ml{,i,y}>: package(lwt.unix)
+<tests/*.ml{,i,y}>: package(sqlite3)
+<tests/*.ml{,i,y}>: package(threads)
+<tests/*.ml{,i,y}>: package(unix)
 <tests/*.ml{,i,y}>: use_sqlexpr
 <tests/*.ml{,i,y}>: use_sqlexpr_syntax
 # OASIS_STOP
 <src/*.ml{,i}>: thread
-<src/*.ml{,i}>: syntax(camlp4o)
 <src/syntax/*.ml{,i}>: syntax(camlp4o)
 "src/ppx/ppx_sqlexpr.ml": cppo_V_OCAML
