@@ -5,7 +5,7 @@ open Lwt
 module Option = Sqlexpr_utils.Option
 module CONC = Sqlexpr_concurrency.Lwt
 
-let failwithfmt fmt = ksprintf (fun s -> try_lwt failwith s) fmt
+let failwithfmt fmt = ksprintf (fun s -> [%lwt failwith s]) fmt
 
 (* Total number of threads currently running: *)
 let thread_count = ref 0
@@ -113,14 +113,15 @@ struct
     Stmt_cache.flush_stmts w.stmt_cache;
     (* must run Stmt.finalize and Sqlite3.db_close in the same thread where
      * the handles were created! *)
-    ignore begin try_lwt
-      !do_detach w
-        (fun handle () ->
-           WT.iter (fun stmt -> Stmt.finalize stmt) w.stmts;
-           ignore (Sqlite3.db_close handle))
-        ()
-    with e -> return () (* FIXME: log? *)
-    end
+    ignore (
+      try%lwt
+        !do_detach w
+          (fun handle () ->
+             WT.iter (fun stmt -> Stmt.finalize stmt) w.stmts;
+             ignore (Sqlite3.db_close handle))
+          ()
+      with e -> return () (* FIXME: log? *)
+    )
 
   let new_id =
     let n = ref 0 in
@@ -197,11 +198,11 @@ struct
              | `Failure exn ->
                  wakeup_exn wakener exn) in
     let thread = worker.worker_thread in
-      try_lwt
+      (
         WSet.remove worker.db.free_workers worker;
         Lwt_mutex.with_lock thread.mutex
           (fun () ->
-             try_lwt
+             try%lwt
                check_worker_finished worker;
                (* Send the id and the task to the worker: *)
                Mutex.lock thread.pmutex;
@@ -209,11 +210,13 @@ struct
                Mutex.unlock thread.pmutex;
                Condition.signal thread.cv;
                return ()
-             with e -> wakeup_exn wakener e; return ()) >>
+             with e -> wakeup_exn wakener e; return ())
+        >>
         waiter
-      finally
+      )[%finally
         WSet.add worker.db.free_workers worker;
         return ()
+      ]
 
   let () = do_detach := detach
 
@@ -244,8 +247,8 @@ struct
 
   let make_worker db =
     db.worker_count <- db.worker_count + 1;
-    lwt thread = get_thread () in
-      try_lwt
+    let%lwt thread = get_thread () in
+      (try%lwt
         let worker =
           {
             db = db;
@@ -255,7 +258,7 @@ struct
             stmt_cache = Stmt_cache.create ();
             worker_thread = thread;
           } in
-        lwt handle =
+        let%lwt handle =
           detach worker
             (fun _ () ->
                let handle = Sqlite3.db_open db.file in
@@ -268,10 +271,12 @@ struct
            return worker
       with e ->
         db.worker_count <- db.worker_count - 1;
-        raise_lwt e
-      finally
+        Lwt.fail e
+      )
+      [%finally
         add_thread thread;
         return ()
+      ]
 
   let do_raise_error ?sql ?params ?errmsg errcode =
     let msg = Sqlite3.Rc.to_string errcode ^ Option.map_default ((^) " ") "" errmsg in
@@ -285,10 +290,10 @@ struct
     in raise (Error (msg, Sqlite_error (msg, errcode)))
 
   let raise_error worker ?sql ?params ?errmsg errcode =
-    lwt errmsg = match errmsg with
+    let%lwt errmsg = match errmsg with
         Some e -> return e
       | None -> detach worker (fun dbh () -> Sqlite3.errmsg dbh) ()
-    in try_lwt return (do_raise_error ?sql ?params ~errmsg errcode)
+    in [%lwt return (do_raise_error ?sql ?params ~errmsg errcode)]
 
   let rec run ?(retry_on_busy = !retry_on_busy) ?stmt ?sql ?params worker f x =
     detach worker f x >>= function
@@ -296,15 +301,15 @@ struct
     | Sqlite3.Rc.BUSY when retry_on_busy ->
         Lwt_unix.sleep 0.010 >> run ~retry_on_busy ?sql ?stmt ?params worker f x
     | code ->
-        lwt errmsg = detach worker (fun dbh () -> Sqlite3.errmsg dbh) () in
-        begin match stmt with
+        let%lwt errmsg = detach worker (fun dbh () -> Sqlite3.errmsg dbh) () in
+        let%lwt () = begin match stmt with
             None -> return ()
-          | Some stmt -> detach worker (fun dbh -> Stmt.reset) stmt >> return ()
-        end >>
+          | Some stmt -> let%lwt _ = detach worker (fun dbh -> Stmt.reset) stmt in return ()
+        end in
         raise_error worker ?sql ?params ~errmsg code
 
   let check_ok ?retry_on_busy ?stmt ?sql ?params worker f x =
-    lwt _ = run ?retry_on_busy ?stmt ?sql ?params worker f x in return ()
+    let%lwt _ = run ?retry_on_busy ?stmt ?sql ?params worker f x in return ()
 
   (* Wait for worker to be available, then return it: *)
   let rec get_worker db =
@@ -320,42 +325,41 @@ struct
     end
 
   let prepare db f (params, nparams, sql, stmt_id) =
-    lwt worker = get_worker db in
-    (try_lwt return (check_worker_finished worker)) >>
-    lwt stmt =
-      try_lwt
+    let%lwt worker = get_worker db in
+    [%lwt return (check_worker_finished worker)] >>
+    let%lwt stmt =
+      try%lwt
         match stmt_id with
             None ->
               profile_prepare_stmt sql
                 (fun () ->
-                   lwt stmt = detach worker Stmt.prepare sql in
+                  let%lwt stmt = detach worker Stmt.prepare sql in
                      WT.add worker.stmts stmt;
                      return stmt)
           | Some id ->
               match Stmt_cache.find_remove_stmt worker.stmt_cache id with
                 Some stmt ->
-                  begin try_lwt
+                  begin try%lwt
                     check_ok ~stmt worker (fun _ -> Stmt.reset) stmt
                   with e ->
                     (* drop the stmt *)
                     detach worker (fun _ -> Stmt.finalize) stmt >>
-                    raise_lwt e
+                    Lwt.fail e
                   end >>
                   return stmt
               | None ->
                   profile_prepare_stmt sql
                     (fun () ->
-                       lwt stmt = detach worker Stmt.prepare sql in
+                      let%lwt stmt = detach worker Stmt.prepare sql in
                          WT.add worker.stmts stmt;
                          return stmt)
       with e ->
         add_worker db worker;
         let s = sprintf "Error with SQL statement %s" sql in
-          raise_lwt (Error (s, e))
+          Lwt.fail (Error (s, e))
     in
       (* the list of params is reversed *)
-      begin try_lwt
-        detach worker
+      ( detach worker
           (fun dbh stmt ->
              let n = ref nparams in
                List.iter
@@ -364,70 +368,71 @@ struct
                     | code -> do_raise_error ~sql ~params code)
                  params)
           stmt
-        finally
+      )[%finally
           add_worker db worker;
           return ()
-      end >>
+      ] >>
       profile_execute_sql sql ~params
         (fun () ->
-           try_lwt
-             f (worker, stmt) sql params
-           finally
+           (f (worker, stmt) sql params)
+           [%finally
              match stmt_id with
                  Some id -> Stmt_cache.add_stmt worker.stmt_cache id stmt; return ()
-               | None -> return ())
+               | None -> return ()
+           ]
+        )
 
   let borrow_worker db f =
     let db' =
-      { open_db ~init:db.init_func db.file with max_workers = 1;
+      { (open_db ~init:db.init_func db.file) with max_workers = 1;
                                                 tx_key = db.tx_key;
       } in
-    lwt worker = get_worker db in
+    let%lwt worker = get_worker db in
       add_worker db' { worker with db = db' } ;
       add_worker db worker;
-      try_lwt
-        f db'
-      finally
+      (f db')
+      [%finally
         db'.workers <- [];
         close_db db';
         return ()
+      ]
 
   let steal_worker db f =
     let db' =
-      { open_db ~init:db.init_func db.file with max_workers = 1;
+      { (open_db ~init:db.init_func db.file) with max_workers = 1;
                                                 tx_key = db.tx_key;
       } in
-    lwt worker = get_worker db in
+    let%lwt worker = get_worker db in
       add_worker db' { worker with db = db' } ;
-      try_lwt
-        f db'
-      finally
+      (f db')
+      [%finally
         db'.workers <- [];
         close_db db';
         add_worker db worker;
         return ()
+      ]
 
   let step ?sql ?params (worker, stmt) =
     run ?sql ?params ~stmt worker (fun _ -> Stmt.step) stmt
 
   let step_with_last_insert_rowid ?sql ?params ((worker, _) as stmt) =
-    step ?sql ?params stmt >>
+    let%lwt _ = step ?sql ?params stmt in
     detach worker (fun dbh () -> Sqlite3.last_insert_rowid dbh) ()
 
   let reset_with_errcode (worker, stmt) =
     detach worker (fun _ -> Stmt.reset) stmt
 
-  let reset x = reset_with_errcode x >> return ()
+  let reset x = let%lwt _ = reset_with_errcode x in return ()
 
   let row_data (worker, stmt) = detach worker (fun _ -> Stmt.row_data) stmt
 
   let unsafe_execute db ?retry_on_busy sql =
-    lwt worker = get_worker db in
-      try_lwt
-        check_ok ?retry_on_busy ~sql worker (fun dbh sql -> Sqlite3.exec dbh sql) sql
-      finally
+    let%lwt worker = get_worker db in
+      (check_ok ?retry_on_busy ~sql worker (fun dbh sql -> Sqlite3.exec dbh sql) sql)
+      [%finally
         add_worker db worker;
         return ()
+      ]
 
   let raise_error (worker, _) ?sql ?params ?errmsg errcode =
     raise_error worker ?sql ?params ?errmsg errcode

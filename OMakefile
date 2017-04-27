@@ -5,13 +5,11 @@ BYTE_ENABLED   = true
 OCAMLPACKS[] =
     csv
     sqlite3
-    estring
     lwt
+    lwt.ppx
     lwt.unix
-    lwt.syntax
     threads
 
-OCAMLFINDFLAGS = -syntax camlp4o
 OCAMLFLAGS     = -thread -bin-annot -g -w +a-4-6-9-27..29-32..99 -warn-error -a
 
 OCAMLDEP_MODULES_ENABLED = false
