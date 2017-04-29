@@ -68,7 +68,8 @@ sig
   val get_retry_on_busy : unit -> bool
 
   (** Open the DB whose filename is given. [":memory:"] refers to an in-mem DB.
-    * @param [init] function to be applied to [Sqlite3.db] handle(s) before
+    *
+    * @param init function to be applied to [Sqlite3.db] handle(s) before
     * they are used (can be used to register functions or initialize schema in
     * in-mem tables. *)
   val open_db : ?init:(Sqlite3.db -> unit) -> string -> db
