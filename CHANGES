@@ -1,6 +1,9 @@
+0.8.0
+=====
+* camlp4 syntax extension now optional (Josh Allmann)
 
-Changes since 0.6.0
-===================
+0.7.0
+=====
 
 * PPX extension thanks to Josh Allmann
 * more efficient row iteration/selection (in batches) in Sqlexpr_sqlite_lwt
