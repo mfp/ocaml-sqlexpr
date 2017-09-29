@@ -1,0 +1,9 @@
+(jbuild_version 1)
+
+(library
+ ((name        pa_sqlexpr)
+  (public_name pa_sqlexpr)
+  (synopsis "Camlp4 syntax for sqlexpr")
+  (wrapped false)
+  (libraries (camlp4.lib camlp4.quotations.r estring))
+  (preprocess (action (run camlp4orf ${<})))))

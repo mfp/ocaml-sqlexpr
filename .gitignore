@@ -31,7 +31,6 @@ oUnit-anon.cache
 /src/ppx/ppx.mllib
 /src/sqlexpr.mllib
 /src/syntax/sqlexpr_syntax.mllib
-/src/ppx/ppx_sqlexpr.ml
 /sqlexpr.mllib
 /sqlexpr.odocl
 /sqlexpr_syntax.mllib
@@ -41,3 +40,4 @@ oUnit-anon.cache
 /toplevel
 /ocaml-sqlexpr*
 *.mldylib
+.merlin
