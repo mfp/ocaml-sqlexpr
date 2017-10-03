@@ -1,6 +1,6 @@
 version = "dev"
 description = "Sqlexpr syntax extension"
-requires = "camlp4"
+requires = "camlp4 estring"
 archive(syntax,preprocessor) = "pa_sql.cma"
 archive(syntax, toploop) = "pa_sql.cma"
 archive(syntax, preprocessor, native) = "pa_sql.cmxa"
