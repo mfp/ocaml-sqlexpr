@@ -1,29 +1,30 @@
 (jbuild_version 1)
 
 (executable
- ((name         example_ppx)
-  (modules      (example_ppx))
+ ((name         example)
+  (modules      (example))
   (libraries    (sqlexpr oUnit))
   (preprocess   (pps (ppx_sqlexpr)))))
 
 (executable
- ((name         t_ppx_parse)
-  (modules      (t_ppx_parse))
+ ((name         t_parse)
+  (modules      (t_parse))
   (libraries    (sqlexpr oUnit))
   (preprocess   (pps (ppx_sqlexpr)))))
 
 (alias
  ((name runtest)
   (package ppx_sqlexpr)
-  (action (run ${exe:t_ppx_parse.exe}))))
+  (action (run ${exe:t_parse.exe}))))
 
 (executable
- ((name         t_ppx_sqlexpr)
-  (modules      (t_ppx_sqlexpr))
+ ((name         t_sqlexpr)
+  (modules      (t_sqlexpr))
   (libraries    (sqlexpr oUnit lwt))
   (preprocess   (pps (ppx_sqlexpr lwt.ppx)))))
 
 (alias
  ((name runtest)
   (package ppx_sqlexpr)
-  (action (run ${exe:t_ppx_sqlexpr.exe}))))
+  (action (run ${exe:t_sqlexpr.exe}))))
+
