@@ -146,19 +146,29 @@ let register_shared_expr =
 
 let get_shared_expr = Hashtbl.find shared_exprs
 
-let shared_exprs = object
-  inherit [string list] Ppx_core.Ast_traverse.fold as super
-
-  method! expression e acc =
-    let acc = super#expression e acc in
-    match shared_expr_id e.pexp_desc with
-    | Some id -> id::acc
-    | None -> acc
-end
+(* We replace Ppx_core.Ast_traverse.fold with this inelegant fold for
+ * compatibility with 4.02. *)
+let shared_exprs expr =
+  let ret = ref [] in
+  let mapper =
+    {
+      Ast_mapper.default_mapper with
+          expr = begin fun mapper expr ->
+            let x = default_mapper.Ast_mapper.expr mapper expr in
+              begin match shared_expr_id expr.pexp_desc with
+                | Some id -> ret := id :: !ret
+                | None -> ()
+              end;
+              x
+          end;
+    }
+  in
+    ignore (mapper.expr mapper expr);
+    !ret
 
 let map_expr mapper loc expr =
   let expr = mapper.Ast_mapper.expr mapper expr in
-  let ids = shared_exprs#expression expr [] in
+  let ids = shared_exprs expr in
   with_default_loc loc (fun () ->
     List.fold_left (fun acc id ->
         [%expr let [%p AC.pvar id] = [%e get_shared_expr id] in [%e acc]])
@@ -192,7 +202,7 @@ let sqlexpr_mapper =
       { structure_item with pstr_desc = Pstr_value (rec_flag, vbs)}
     | x -> default_mapper.structure_item mapper x);
 })
-                  
+
 let () =
   Random.self_init ();
   Driver.register ~name:"ppx_sqlexpr"
