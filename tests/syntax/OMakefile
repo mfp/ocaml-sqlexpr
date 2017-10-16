@@ -9,9 +9,10 @@ OCAML_LIBS[] += $(ROOT)/src/sqlexpr
 section
     OCAMLPACKS[] = csv estring lwt.syntax lwt.unix oUnit sqlite3 threads
     OCAMLFINDFLAGS = -syntax camlp4o -ppopt $(ROOT)/src/syntax/pa_sql.cmo
-    OCamlProgram(t_sqlexpr_sqlite, t_sqlexpr_sqlite)
+    OCamlProgram(t_parse, t_parse)
+    OCamlProgram(t_sqlexpr, t_sqlexpr)
     OCamlProgram(bm_sqlexpr_sqlite_lwt, bm_sqlexpr_sqlite_lwt)
-    $(addsuffixes .o .cmx .cmi .cmo, bm_sqlexpr_sqlite_lwt t_sqlexpr_sqlite):
+    $(addsuffixes .o .cmx .cmi .cmo, bm_sqlexpr_sqlite_lwt t_sqlexpr t_parse):
 
 .PHONY: test
 test: t_sqlexpr$(EXE) t_parse$(EXE)
