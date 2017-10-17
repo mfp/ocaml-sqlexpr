@@ -6,7 +6,10 @@
     pa_sql.cmi pa_sql.cmo: pa_sql.ml
 
 .SUBDIRS: ppx
+    BYTE_ENABLED = false
+    unsetenv(OCAMLFIND_TOOLCHAIN)
     OCAMLPACKS[]   = compiler-libs.common ocaml-migrate-parsetree ppx_tools_versioned ppx_core re.pcre unix ppx_tools_versioned.metaquot_403
+    OCAML_LINK_FLAGS  += $(shell $(OCAMLFIND) query -predicates "archive,native" -a-format ocaml-migrate-parsetree.driver-main)
     OCamlProgram(ppx_sqlexpr, sqlexpr_parser ppx_sqlexpr)
 
 .SCANNER: scan-ocaml-%.ml: %.ml syntax/pa_sql.cmo
