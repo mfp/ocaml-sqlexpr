@@ -8,10 +8,20 @@ bug-reports: "https://github.com/mfp/ocaml-sqlexpr/issues"
 build: [
   [ "jbuilder" "build" "-p" name "-j" jobs ]
 ]
+build-test: [["jbuilder" "runtest" "-p" name "-j" jobs]]
 depends: [
   "jbuilder" {build}
   "csv"
   "lwt" {>= "2.2.0"}
   ("sqlite3" {>= "2.0.4"} | "sqlite3" {= "2.0.3"})
   "base-unix"
+  "ppx_tools_versioned"
+  "ppx_core"
+  "ocaml-migrate-parsetree"
+  "re" {build & >= "1.3.0"}
+  "ounit" {test}
+]
+depopts: [
+  "camlp4"
+  "estring"
 ]
