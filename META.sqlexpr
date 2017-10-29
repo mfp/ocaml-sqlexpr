@@ -25,6 +25,7 @@ package "ppx" (
 )
 
 package "omp" (
+  directory = "ppx"
   version = "dev"
   description = "Sqlexpr ocaml-migrate-parsetree PPX (internal)"
   requires(ppx_driver) = "compiler-libs
