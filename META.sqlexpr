@@ -19,8 +19,3 @@ package "ppx" (
   description = "Deprecated, use ppx_sqlexpr directly"
   requires = "ppx_sqlexpr"
 )
-
-package "syntax" (
-  description = "Deprecated, use pa_sqlexpr directly"
-  requires = "pa_sqlexpr"
-)
