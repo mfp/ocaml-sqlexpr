@@ -2,7 +2,7 @@
 
 (library
  ((name        ppx_sqlexpr)
-  (public_name sqlexpr.ppx)
+  (public_name ppx_sqlexpr)
   (synopsis "Sqlexpr PPX syntax extension")
   (wrapped false)
   (kind ppx_rewriter)

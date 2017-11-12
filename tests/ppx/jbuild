@@ -4,27 +4,27 @@
  ((name         example)
   (modules      (example))
   (libraries    (sqlexpr oUnit))
-  (preprocess   (pps (sqlexpr.ppx)))))
+  (preprocess   (pps (ppx_sqlexpr)))))
 
 (executable
  ((name         t_parse)
   (modules      (t_parse))
   (libraries    (sqlexpr oUnit))
-  (preprocess   (pps (sqlexpr.ppx)))))
+  (preprocess   (pps (ppx_sqlexpr)))))
 
 (alias
  ((name runtest)
-  (package sqlexpr)
+  (package ppx_sqlexpr)
   (action (run ${exe:t_parse.exe}))))
 
 (executable
  ((name         t_sqlexpr)
   (modules      (t_sqlexpr))
   (libraries    (sqlexpr oUnit lwt))
-  (preprocess   (pps (sqlexpr.ppx lwt.ppx)))))
+  (preprocess   (pps (ppx_sqlexpr lwt.ppx)))))
 
 (alias
  ((name runtest)
-  (package sqlexpr)
+  (package ppx_sqlexpr)
   (action (run ${exe:t_sqlexpr.exe}))))
 

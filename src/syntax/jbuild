@@ -2,10 +2,8 @@
 
 (library
  ((name        pa_sql)
-  (public_name sqlexpr.syntax)
+  (public_name pa_sqlexpr)
   (synopsis "Camlp4 syntax for sqlexpr")
-  (optional)
-  (wrapped false)
   (libraries (camlp4 camlp4.quotations.r estring))
   (library_flags (-linkall))
   (preprocess (action (run camlp4orf ${<})))))

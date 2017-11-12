@@ -10,8 +10,6 @@ build: [
 ]
 depends: [
   "jbuilder" {build}
-  "csv"
-  "lwt" {>= "2.2.0"}
-  ("sqlite3" {>= "2.0.4"} | "sqlite3" {= "2.0.3"})
-  "base-unix"
+  "sqlexpr"
+  "camlp4"
 ]

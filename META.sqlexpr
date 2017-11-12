@@ -1,4 +1,4 @@
-description = "SQLite database access."
+description = "Convenient, type-safe SQLite database access."
 requires = "bigarray
             bytes
             csv
@@ -16,38 +16,11 @@ plugin(byte) = "sqlexpr.cma"
 plugin(native) = "sqlexpr.cmxs"
 
 package "ppx" (
-  directory = "ppx"
-  version = "dev"
-  description = "Sqlexpr PPX syntax extension"
-  requires(ppx_driver) = "sqlexpr.omp"
-  requires(-ppx_driver) = "bytes sqlexpr re result"
-  ppx(-ppx_driver,-custom_ppx) = "./ppx.exe --as-ppx"
-)
-
-package "omp" (
-  directory = "ppx"
-  version = "dev"
-  description = "Sqlexpr ocaml-migrate-parsetree PPX (internal)"
-  requires(ppx_driver) = "compiler-libs
-                          compiler-libs.common
-                          ocaml-migrate-parsetree
-                          ppx_tools_versioned"
- ppx_runtime_deps = "bytes sqlexpr re result"
- exists_if = "ppx_sqlexpr.cma"
- archive(byte) = "ppx_sqlexpr.cma"
- archive(native) = "ppx_sqlexpr.cmxa"
- plugin(byte) = "ppx_lwt.cma"
- plugin(native) = "ppx_lwt.cmxs"
+  description = "Deprecated, use ppx_sqlexpr directly"
+  requires = "ppx_sqlexpr"
 )
 
 package "syntax" (
-  directory = "syntax"
-  version = "dev"
-  description = "Sqlexpr syntax extension"
-  requires = "camlp4 estring"
-  archive(syntax,preprocessor) = "pa_sql.cma"
-  archive(syntax, toploop) = "pa_sql.cma"
-  archive(syntax, preprocessor, native) = "pa_sql.cmxa"
-  archive(syntax, preprocessor, native, plugin) = "pa_sql.cmxs"
-  exists_if = "pa_sql.cma"
+  description = "Deprecated, use pa_sqlexpr directly"
+  requires = "pa_sqlexpr"
 )
