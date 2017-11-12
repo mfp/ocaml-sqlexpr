@@ -15,3 +15,10 @@ depends: [
   ("sqlite3" {>= "2.0.4"} | "sqlite3" {= "2.0.3"})
   "base-unix"
 ]
+
+messages: [
+  "For the PPX syntax extension, install package ppx_sqlexpr"
+  {!ppx_sqlexpr:installed}
+  "For the Camlp4 syntax extension, install package pa_sqlexpr"
+  {!pa_sqlexpr:installed}
+]
