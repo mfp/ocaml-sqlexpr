@@ -189,7 +189,7 @@ let iter_users db f =
 
 Example Camlp4 Code:
 ```
-ocamlfind ocamlc -package sqlexpr,sqlexpr.syntax -syntax camlp4o -linkpkg -thread -o sqlexpr_camlp4 tests/syntax/example.ml
+ocamlfind ocamlc -package sqlexpr,pa_sqlexpr -syntax camlp4o -linkpkg -thread -o sqlexpr_camlp4 tests/syntax/example.ml
 ```
 
 Example PPX Code
@@ -203,7 +203,7 @@ jbuilder build tests/ppx/example.exe
 
 Camlp4 based tests:
 ```
-ocamlfind ocamlc -package sqlexpr,sqlexpr.syntax,lwt.syntax,oUnit -syntax camlp4o -linkpkg -thread -o sqlexpr_camlp4_test tests/syntax/t_sqlexpr.ml
+ocamlfind ocamlc -package sqlexpr,pa_sqlexpr,lwt.syntax,oUnit -syntax camlp4o -linkpkg -thread -o sqlexpr_camlp4_test tests/syntax/t_sqlexpr.ml
 ```
 
 PPX based tests:
