@@ -12,7 +12,6 @@ build: [
 build-test: [["jbuilder" "runtest" "-p" name "-j" jobs]]
 depends: [
   "jbuilder" {build}
-  "sqlexpr"
   "ppx_tools_versioned"
   "ppx_core"
   "ocaml-migrate-parsetree"

@@ -19,3 +19,14 @@ package "ppx" (
   description = "Deprecated, use ppx_sqlexpr directly"
   requires = "ppx_sqlexpr"
 )
+
+package "syntax" (
+    version = "dev"
+    description = "Sqlexpr syntax extension"
+    requires = "camlp4 estring"
+    archive(syntax,preprocessor) = "syntax/pa_sql_.cma"
+    archive(syntax, toploop) = "syntax/pa_sql_.cma"
+    archive(syntax, preprocessor, native) = "syntax/pa_sql_.cmxa"
+    archive(syntax, preprocessor, native, plugin) = "syntax/pa_sql_.cmxs"
+    exists_if = "syntax/pa_sql_.cma"
+)

@@ -8,5 +8,4 @@
   (kind ppx_rewriter)
   (libraries (ppx_core unix re.pcre compiler-libs.common
               ocaml-migrate-parsetree ppx_tools_versioned))
-  (ppx_runtime_libraries (sqlexpr))
   (preprocess (pps (ppx_tools_versioned.metaquot_403)))))

@@ -14,9 +14,7 @@ depends: [
   "lwt" {>= "2.2.0"}
   ("sqlite3" {>= "2.0.4"} | "sqlite3" {= "2.0.3"})
   "base-unix"
-  "ppx_sqlexpr"
 ]
-depopts: [ "estring" ]
 
 messages: [
   "For the PPX syntax extension, install package ppx_sqlexpr"
@@ -24,7 +22,3 @@ messages: [
   "For the Camlp4 syntax extension, install package pa_sqlexpr"
   {!pa_sqlexpr:installed}
 ]
-post-messages: [
-  "The sqlexpr.ppx and sqlexpr.syntax package aliases will be dropped
-eventually. Switch to ppx_sqlexpr and pa_sqlexpr now."
-  ]
