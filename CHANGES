@@ -1,7 +1,29 @@
-1.0.0 (unreleased)
-==================
+0.9.0  (2018-05-12)
+=====
 * migrate to jbuilder, move the PPX and Camlp4 extensions to separate packages
-  ppx_sqlexpr and pa_sqlexpr (Freyr)
+  ppx_sqlexpr and pa_sqlexpr (Freyr).
+* fix stack overflows when iterating/fold/selecting over many rows when
+  using Sqlexpr_concurrency.Id concurrency.
+* multiple fixes to work with newer versions of Lwt and lwt_ppx.
+
+Backwards compatibility is provided for the time being as follows:
+* sqlexpr depends on ppx_sqlexpr, and a sqlexpr.ppx alias is provided
+* if estring was installed (required if sqlexpr.syntax was being used),
+  sqlexpr.syntax will also be installed
+* installing pa_sqlexpr will also install its estring dependency, and
+  cause a sqlexpr rebuild, so that sqlexpr.syntax is provided
+
+These mean that it is still possible to (wherever it was before) compile e.g.
+with
+
+   ocamlfind ocamlopt -package sqlexpr,sqlexpr.syntax -syntax camlp4o -c ...
+
+but in the future the sqlexpr.syntax and sqlexpr.ppx aliases will be dropped,
+so it is recommended to:
+
+1) opam install ppx_sqlexpr and/or pa_sqlexpr explicitly
+2) start using the ppx_sqlexpr instead of sqlexpr.ppx and pa_sqlexpr instead
+   of sqlexpr.syntax in your build system.
 
 0.8.0
 =====
