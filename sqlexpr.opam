@@ -12,7 +12,7 @@ depends: [
   "jbuilder" {build}
   "csv"
   "lwt" {>= "2.2.0"}
-  "lwt_ppx"
+  "lwt_ppx" {build}
   ("sqlite3" {>= "2.0.4"} | "sqlite3" {= "2.0.3"})
   "base-unix"
   "ppx_sqlexpr"
