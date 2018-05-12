@@ -5,7 +5,7 @@ open Lwt
 module Option = Sqlexpr_utils.Option
 module CONC = Sqlexpr_concurrency.Lwt
 
-let failwithfmt fmt = ksprintf (fun s -> [%lwt failwith s]) fmt
+let failwithfmt fmt = ksprintf (fun s -> Lwt.fail (Failure s)) fmt
 
 (* Total number of threads currently running: *)
 let thread_count = ref 0
@@ -294,7 +294,10 @@ struct
     let%lwt errmsg = match errmsg with
         Some e -> return e
       | None -> detach worker (fun dbh () -> Sqlite3.errmsg dbh) ()
-    in [%lwt return (do_raise_error ?sql ?params ~errmsg errcode)]
+    in
+      Lwt.catch
+        (fun () -> do_raise_error ?sql ?params ~errmsg errcode)
+        Lwt.fail
 
   let rec run ?(retry_on_busy = !retry_on_busy) ?stmt ?sql ?params worker f x =
     detach worker f x >>= function

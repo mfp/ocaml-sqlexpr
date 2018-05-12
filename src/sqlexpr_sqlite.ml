@@ -415,7 +415,9 @@ struct
 
   let handle db =
     if db.thread_id <> curr_thread_id () then
-      [%lwt raise_thread_error ~msg:"in IdentityPool.handle" db.thread_id]
+      Lwt.catch
+        (fun () -> raise_thread_error ~msg:"in IdentityPool.handle" db.thread_id)
+        Lwt.fail
     else return db.handle
 
   let close_db db =
@@ -750,7 +752,7 @@ struct
                Sqlite3.Rc.ROW ->
                  let%lwt data = POOL.row_data stmt in
                  let%lwt () = check_num_cols "select" stmt expr data in
-                 let%lwt x = [%lwt f (snd expr.get_data data)] in
+                 let%lwt x = Lwt.catch (fun () -> f (snd expr.get_data data)) Lwt.fail in
                    loop (x :: l)
              | Sqlite3.Rc.DONE -> return (List.rev l)
              | rc -> POOL.raise_error ~sql ~params stmt rc
@@ -793,7 +795,7 @@ struct
            POOL.step stmt >>= function
                Sqlite3.Rc.ROW ->
                  let%lwt data = POOL.row_data stmt in
-                 [%lwt f (snd expr.get_data data)]
+                   Lwt.catch (fun () -> f (snd expr.get_data data)) Lwt.fail
              | Sqlite3.Rc.DONE -> not_found ()
              | rc -> POOL.raise_error ~sql ~params stmt rc
          end ())
@@ -879,11 +881,13 @@ struct
            let%lwt () = auto_yield () in
            POOL.step stmt >>= function
                Sqlite3.Rc.ROW ->
-                 [%lwt
-                   let%lwt data = POOL.row_data stmt in
-                   let%lwt () = check_num_cols "fold" stmt expr data in
-                   f acc (snd expr.get_data data)
-                 ] >>= loop
+                 Lwt.catch
+                   (fun () ->
+                     let%lwt data = POOL.row_data stmt in
+                     let%lwt () = check_num_cols "fold" stmt expr data in
+                       f acc (snd expr.get_data data))
+                   Lwt.fail
+                 >>= loop
              | Sqlite3.Rc.DONE -> return acc
              | rc -> POOL.raise_error ~sql ~params stmt rc
          in ensure_reset_stmt stmt loop init)
@@ -919,11 +923,13 @@ struct
            let%lwt () = auto_yield () in
            POOL.step stmt >>= function
                Sqlite3.Rc.ROW ->
-                 [%lwt
-                   let%lwt data = POOL.row_data stmt in
-                   let%lwt () = check_num_cols "iter" stmt expr data in
-                   f (snd expr.get_data data)
-                 ] >>= loop
+                 Lwt.catch
+                   (fun () ->
+                     let%lwt data = POOL.row_data stmt in
+                     let%lwt () = check_num_cols "iter" stmt expr data in
+                       f (snd expr.get_data data))
+                   Lwt.fail
+                 >>= loop
              | Sqlite3.Rc.DONE -> return ()
              | rc -> POOL.raise_error stmt ~sql ~params rc
          in ensure_reset_stmt stmt loop ())
