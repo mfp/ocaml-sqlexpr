@@ -1,0 +1,27 @@
+(* -*- tuareg -*- *)
+
+let jbuild = {str|
+(jbuild_version 1)
+
+(library
+ ((name        pa_sql_)
+  (public_name sqlexpr.syntax)
+  (synopsis "Camlp4 syntax for sqlexpr")
+  (libraries (camlp4 camlp4.quotations.r estring))
+  (library_flags (-linkall))
+  (preprocess (action (run camlp4orf ${<})))))
+|str}
+
+let safe_string =
+  try
+    List.assoc "safe_string" Jbuild_plugin.V1.ocamlc_config = "true" ||
+    List.assoc "default_safe_string" Jbuild_plugin.V1.ocamlc_config = "true"
+  with Not_found -> false
+
+let estring =
+  try
+    Sys.getenv "ESTRING" = "enable"
+  with Not_found -> false
+
+let () =
+  Jbuild_plugin.V1.send @@ if estring then jbuild else "(jbuild_version 1)"

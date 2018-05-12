@@ -1,0 +1,32 @@
+description = "Convenient, type-safe SQLite database access."
+requires = "bigarray
+            bytes
+            csv
+            lwt
+            lwt.log
+            lwt.unix
+            result
+            sqlite3
+            threads
+            threads.posix
+            unix"
+archive(byte) = "sqlexpr.cma"
+archive(native) = "sqlexpr.cmxa"
+plugin(byte) = "sqlexpr.cma"
+plugin(native) = "sqlexpr.cmxs"
+
+package "ppx" (
+  description = "Deprecated, use ppx_sqlexpr directly"
+  requires = "ppx_sqlexpr"
+)
+
+package "syntax" (
+    version = "dev"
+    description = "Sqlexpr syntax extension"
+    requires = "camlp4 estring"
+    archive(syntax,preprocessor) = "syntax/pa_sql_.cma"
+    archive(syntax, toploop) = "syntax/pa_sql_.cma"
+    archive(syntax, preprocessor, native) = "syntax/pa_sql_.cmxa"
+    archive(syntax, preprocessor, native, plugin) = "syntax/pa_sql_.cmxs"
+    exists_if = "syntax/pa_sql_.cma"
+)

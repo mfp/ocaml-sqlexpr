@@ -1,0 +1,9 @@
+(jbuild_version 1)
+
+(library
+ ((name        sqlexpr)
+  (public_name sqlexpr)
+  (synopsis "SQLite database access.")
+  (wrapped false)
+  (libraries (csv sqlite3 lwt lwt.unix unix threads))
+  (preprocess (pps (lwt_ppx)))))

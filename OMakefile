@@ -6,7 +6,7 @@ OCAMLPACKS[] =
     csv
     sqlite3
     lwt
-    lwt.ppx
+    lwt_ppx
     lwt.unix
     threads
 
@@ -20,39 +20,11 @@ OCAMLDEP_MODULES_ENABLED = false
             $(mapprefix -I, $(OCAMLINCLUDES)) \
             $(OCAMLFLAGS) $(OCAMLCFLAGS) -i $< > $@
 
-public.Cppo(file) =
-    $(file).ml: $(file).cppo.ml
-        cppo -o $@ -V "OCAML:$(shell $(OCAMLFIND) ocamlc -version)" $<
-    return $(file).ml
-
-Cppo(src/ppx/ppx_sqlexpr)
-
-.SUBDIRS: src tests
+.SUBDIRS: src tests/ppx tests/syntax
 
 .PHONY: clean
 
 clean:
 	rm -f $(filter-proper-targets $(ls R, .)) *.s *.annot *.so *.a
-
-section
-    VERSION = $`(shell oasis query Version | tail -1)
-    NAME = $`(string ocaml-sqlexpr-$(VERSION))
-    DATE = $`(shell date +%F)
-    BRANCH = $`(string $(VERSION)_$(DATE))
-
-    .PHONY: release
-    release:
-        git checkout -b $(BRANCH)
-	oasis setup
-	echo "let () = Ocamlbuild_plugin.dispatch (fun hook -> Ocamlbuild_cppo.dispatcher hook)" >> myocamlbuild.ml
-	git add -f src/META sqlexpr.odocl Makefile _tags configure \
-	    myocamlbuild.ml setup.ml \
-	    src/sqlexpr.mllib src/syntax/sqlexpr_syntax.mllib src/ppx/ppx.mllib
-	git commit -m "Add OASIS-generated build system."
-	git archive -v --prefix $(NAME)/ -o $(NAME).tar HEAD
-	rm -f $(NAME).tar.gz
-	gzip $(NAME).tar
-	git checkout master
-	git branch -D $(BRANCH)
 
 # vim: set sw=4 et:

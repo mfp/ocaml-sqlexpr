@@ -1,8 +1,11 @@
+open Migrate_parsetree
+open OCaml_403.Ast
+open Ast_mapper
 open Ast_helper
 open Asttypes
 open Parsetree
 
-module AC = Ast_convenience
+module AC = Ast_convenience_403
 
 let new_id =
   let n = ref 0 in
@@ -74,11 +77,7 @@ let gen_sql ?(init=false) ?(cacheable=false) str =
   else gen_expr ~cacheable sql inp outp
 
 let sqlcheck_sqlite () =
-#if OCAML_VERSION >= (4, 3, 0)
   let mkstr s = Exp.constant (Pconst_string (s, None)) in
-#else
-  let mkstr s = Exp.constant (Const_string (s, None)) in
-#endif
   let statement_check = [%expr
     try ignore(Sqlite3.prepare db stmt)
     with Sqlite3.Error s ->
@@ -117,45 +116,95 @@ let sqlcheck_sqlite () =
 
 let call fn loc = function
   | PStr [ {pstr_desc = Pstr_eval (
-#if OCAML_VERSION >= (4, 3, 0)
     { pexp_desc = Pexp_constant(Pconst_string(sym, _))}, _)} ] ->
-#else
-    { pexp_desc = Pexp_constant(Const_string(sym, _))}, _)} ] ->
-#endif
       with_default_loc loc (fun () -> fn sym)
   | _ -> raise (Location.Error(Location.error ~loc (
     "sqlexpr extension accepts a string")))
 
 let call_sqlcheck loc = function
   | PStr [ {pstr_desc = Pstr_eval ({ pexp_desc =
-#if OCAML_VERSION >= (4, 3, 0)
     Pexp_constant(Pconst_string("sqlite", None))}, _)}] ->
-#else
-    Pexp_constant(Const_string("sqlite", None))}, _)}] ->
-#endif
       with_default_loc loc sqlcheck_sqlite
   | _ -> raise (Location.Error(Location.error ~loc (
     "sqlcheck extension accepts \"sqlite\"")))
 
-let new_mapper argv = Ast_mapper.({
+let shared_exprs = Hashtbl.create 25
+
+let shared_expr_id = function
+  | Pexp_ident {txt} ->
+      let id = Longident.last txt in
+      if Hashtbl.mem shared_exprs id then Some id else None
+  | _ -> None
+
+let register_shared_expr =
+  let n = ref 0 in
+  fun expr ->
+    let id = "__ppx_sqlexpr_shared_" ^ string_of_int !n in
+    incr n;
+    Hashtbl.add shared_exprs id expr;
+    id
+
+let get_shared_expr = Hashtbl.find shared_exprs
+
+(* We replace Ppx_core.Ast_traverse.fold with this inelegant fold for
+ * compatibility with 4.02. *)
+let shared_exprs expr =
+  let ret = ref [] in
+  let mapper =
+    {
+      Ast_mapper.default_mapper with
+          expr = begin fun mapper expr ->
+            let x = default_mapper.Ast_mapper.expr mapper expr in
+              begin match shared_expr_id expr.pexp_desc with
+                | Some id -> ret := id :: !ret
+                | None -> ()
+              end;
+              x
+          end;
+    }
+  in
+    ignore (mapper.expr mapper expr);
+    !ret
+
+let map_expr mapper loc expr =
+  let expr = mapper.Ast_mapper.expr mapper expr in
+  let ids = shared_exprs expr in
+  with_default_loc loc (fun () ->
+    List.fold_left (fun acc id ->
+        [%expr let [%p AC.pvar id] = [%e get_shared_expr id] in [%e acc]])
+      expr ids)
+
+let sqlexpr_mapper =
+  Ast_mapper.({
   default_mapper with
-  expr = fun mapper expr ->
+  expr = (fun mapper expr ->
     match expr with
     (* is this an extension node? *)
-    | {pexp_desc = Pexp_extension ({txt = "sql"; loc}, pstr)} ->
+    | {pexp_desc = Parsetree.Pexp_extension ({txt = "sql"; loc}, pstr)} ->
         call gen_sql loc pstr
-    | {pexp_desc = Pexp_extension ({txt = "sqlc"; loc}, pstr)} ->
-        call (gen_sql ~cacheable:true) loc pstr
-    | {pexp_desc = Pexp_extension ({txt = "sqlinit"; loc}, pstr)} ->
-        call (gen_sql ~init:true) loc pstr
-    | {pexp_desc = Pexp_extension ({txt = "sqlcheck"; loc}, pstr)} ->
+    | {pexp_desc = Parsetree.Pexp_extension ({txt = "sqlc"; loc}, pstr)} ->
+        let expr = call (gen_sql ~cacheable:true) loc pstr in
+        let id = register_shared_expr expr in
+        Exp.ident ~loc {txt=Longident.Lident id; loc}
+    | {pexp_desc = Parsetree.Pexp_extension ({txt = "sqlinit"; loc}, pstr)} ->
+       call (gen_sql ~init:true) loc pstr
+    | {pexp_desc = Parsetree.Pexp_extension ({txt = "sqlcheck"; loc}, pstr)} ->
         call_sqlcheck loc pstr
     (* Delegate to the default mapper *)
-    | x -> default_mapper.expr mapper x;
+    | x -> default_mapper.expr mapper x);
+  structure_item = (fun mapper structure_item ->
+    match structure_item with
+    | {pstr_desc = Pstr_value (rec_flag, value_bindings); pstr_loc} ->
+      (* since structure_item gets mapped before expr, need to preemptively
+       * apply our expr mapping to the value_bindings to resolve extensions *)
+      let es = List.map (fun x -> map_expr mapper pstr_loc x.pvb_expr) value_bindings in
+      let vbs = List.map2 (fun x y -> {x with pvb_expr = y}) value_bindings es in
+      { structure_item with pstr_desc = Pstr_value (rec_flag, vbs)}
+    | x -> default_mapper.structure_item mapper x);
 })
 
 let () =
   Random.self_init ();
-  Ast_mapper.register "sqlexpr" new_mapper
-
-(* vim: set ft=ocaml: *)
+  Driver.register ~name:"ppx_sqlexpr"
+    Versions.ocaml_403
+    (fun _ _ -> sqlexpr_mapper)

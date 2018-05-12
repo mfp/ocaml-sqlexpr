@@ -1,0 +1,35 @@
+EXTENSIONS = $(ROOT)/src/ppx/ppx_sqlexpr
+
+.SCANNER: scan-ocaml-%.ml: %.ml $(EXTENSIONS)
+.SCANNER: scan-ocaml-%.mli: %.mli $(EXTENSIONS)
+
+OCAMLINCLUDES += $(ROOT)/src
+OCAML_LIBS[] += $(ROOT)/src/sqlexpr
+
+section
+    OCAMLPACKS[] =
+        compiler-libs.common
+        csv
+        lwt
+        lwt_ppx
+        lwt.unix
+        ppx_tools.metaquot
+        re.pcre
+        sqlite3
+        threads
+        oUnit
+        unix
+
+    OCAMLFINDFLAGS = -ppx $(ROOT)/src/ppx/ppx_sqlexpr -ppxopt lwt.ppx,-no-debug
+    OCAMLDEPFLAGS  = -ppx $(ROOT)/src/ppx/ppx_sqlexpr
+
+    OCamlProgram(t_parse, t_parse)
+    OCamlProgram(t_sqlexpr, t_sqlexpr)
+    $(addsuffixes .o .cmx .cmi .cmo, t_parse t_sqlexpr):
+
+.PHONY: test
+test: t_sqlexpr$(EXE) t_parse$(EXE)
+    ./t_sqlexpr
+    ./t_parse
+
+# vim: set ts=8 expandtab sw=4:
