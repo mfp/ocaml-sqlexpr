@@ -200,19 +200,20 @@ struct
     let thread = worker.worker_thread in
       (
         WSet.remove worker.db.free_workers worker;
-        Lwt_mutex.with_lock thread.mutex
-          (fun () ->
-             try%lwt
-               check_worker_finished worker;
-               (* Send the id and the task to the worker: *)
-               Mutex.lock thread.pmutex;
-               thread.tasks <- (id, task worker.handle) :: thread.tasks;
-               Mutex.unlock thread.pmutex;
-               Condition.signal thread.cv;
-               return ()
-             with e -> wakeup_exn wakener e; return ())
-        >>
-        waiter
+        let%lwt () =
+          Lwt_mutex.with_lock thread.mutex
+            (fun () ->
+               try%lwt
+                 check_worker_finished worker;
+                 (* Send the id and the task to the worker: *)
+                 Mutex.lock thread.pmutex;
+                 thread.tasks <- (id, task worker.handle) :: thread.tasks;
+                 Mutex.unlock thread.pmutex;
+                 Condition.signal thread.cv;
+                 return ()
+               with e -> wakeup_exn wakener e; return ())
+        in
+          waiter
       )[%finally
         WSet.add worker.db.free_workers worker;
         return ()
@@ -299,7 +300,7 @@ struct
     detach worker f x >>= function
       Sqlite3.Rc.OK | Sqlite3.Rc.ROW | Sqlite3.Rc.DONE as r -> return r
     | Sqlite3.Rc.BUSY when retry_on_busy ->
-        Lwt_unix.sleep 0.010 >> run ~retry_on_busy ?sql ?stmt ?params worker f x
+        let%lwt () = Lwt_unix.sleep 0.010 in run ~retry_on_busy ?sql ?stmt ?params worker f x
     | code ->
         let%lwt errmsg = detach worker (fun dbh () -> Sqlite3.errmsg dbh) () in
         let%lwt () = begin match stmt with
@@ -326,7 +327,11 @@ struct
 
   let prepare db f (params, nparams, sql, stmt_id) =
     let%lwt worker = get_worker db in
-    [%lwt return (check_worker_finished worker)] >>
+    let%lwt ()   =
+      try%lwt
+        return (check_worker_finished worker)
+      with exn -> Lwt.fail exn
+    in
     let%lwt stmt =
       try%lwt
         match stmt_id with
@@ -339,14 +344,16 @@ struct
           | Some id ->
               match Stmt_cache.find_remove_stmt worker.stmt_cache id with
                 Some stmt ->
-                  begin try%lwt
-                    check_ok ~stmt worker (fun _ -> Stmt.reset) stmt
-                  with e ->
-                    (* drop the stmt *)
-                    detach worker (fun _ -> Stmt.finalize) stmt >>
-                    Lwt.fail e
-                  end >>
-                  return stmt
+                  let%lwt () =
+                    begin try%lwt
+                      check_ok ~stmt worker (fun _ -> Stmt.reset) stmt
+                    with e ->
+                      (* drop the stmt *)
+                      let%lwt () = detach worker (fun _ -> Stmt.finalize) stmt in
+                        Lwt.fail e
+                    end
+                  in
+                    return stmt
               | None ->
                   profile_prepare_stmt sql
                     (fun () ->
@@ -356,8 +363,9 @@ struct
       with e ->
         add_worker db worker;
         let s = sprintf "Error with SQL statement %s" sql in
-          Lwt.fail (Error (s, e))
-    in
+          Lwt.fail (Error (s, e)) in
+
+    let%lwt () =
       (* the list of params is reversed *)
       ( detach worker
           (fun dbh stmt ->
@@ -371,7 +379,8 @@ struct
       )[%finally
           add_worker db worker;
           return ()
-      ] >>
+      ]
+    in
       profile_execute_sql sql ~params
         (fun () ->
            (f (worker, stmt) sql params)

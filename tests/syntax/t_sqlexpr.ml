@@ -45,36 +45,36 @@ struct
   let test_execute () =
     with_db
       (fun db () ->
-         S.execute db sql"CREATE TABLE foo(id INTEGER PRIMARY KEY)" >>
+         S.execute db sql"CREATE TABLE foo(id INTEGER PRIMARY KEY)" >>= fun () ->
          S.execute db sqlc"CREATE TABLE bar(id INTEGER PRIMARY KEY)")
       ()
 
   let insert_d db l =
-     S.execute db sql"CREATE TABLE foo(id INTEGER PRIMARY KEY, v INTEGER)" >>
+     S.execute db sql"CREATE TABLE foo(id INTEGER PRIMARY KEY, v INTEGER)" >>= fun () ->
      iter (S.execute db sql"INSERT INTO foo(v) VALUES(%d)") l
 
   let insert_l db l =
-     S.execute db sql"CREATE TABLE foo(id INTEGER PRIMARY KEY, v INTEGER)" >>
+     S.execute db sql"CREATE TABLE foo(id INTEGER PRIMARY KEY, v INTEGER)" >>= fun () ->
      iter (S.execute db sql"INSERT INTO foo(v) VALUES(%l)") l
 
   let insert_L db l =
-     S.execute db sql"CREATE TABLE foo(id INTEGER PRIMARY KEY, v INTEGER)" >>
+     S.execute db sql"CREATE TABLE foo(id INTEGER PRIMARY KEY, v INTEGER)" >>= fun () ->
      iter (S.execute db sql"INSERT INTO foo(v) VALUES(%L)") l
 
   let insert_f db l =
-     S.execute db sql"CREATE TABLE foo(id INTEGER PRIMARY KEY, v FLOAT)" >>
+     S.execute db sql"CREATE TABLE foo(id INTEGER PRIMARY KEY, v FLOAT)" >>= fun () ->
      iter (S.execute db sql"INSERT INTO foo(v) VALUES(%f)") l
 
   let insert_s db l =
-     S.execute db sql"CREATE TABLE foo(id INTEGER PRIMARY KEY, v TEXT)" >>
+     S.execute db sql"CREATE TABLE foo(id INTEGER PRIMARY KEY, v TEXT)" >>= fun () ->
      iter (S.execute db sql"INSERT INTO foo(v) VALUES(%s)") l
 
   let insert_S db l =
-     S.execute db sql"CREATE TABLE foo(id INTEGER PRIMARY KEY, v BLOB)" >>
+     S.execute db sql"CREATE TABLE foo(id INTEGER PRIMARY KEY, v BLOB)" >>= fun () ->
      iter (S.execute db sql"INSERT INTO foo(v) VALUES(%S)") l
 
   let insert_b db l =
-     S.execute db sql"CREATE TABLE foo(id INTEGER PRIMARY KEY, v BOOLEAN)" >>
+     S.execute db sql"CREATE TABLE foo(id INTEGER PRIMARY KEY, v BOOLEAN)" >>= fun () ->
      iter (S.execute db sql"INSERT INTO foo(v) VALUES(%b)") l
 
   let test_directive_d () = with_db insert_d [1]
@@ -89,7 +89,7 @@ struct
     with_db
       (fun db () ->
          let n = ref 1 in
-           insert db l >>
+           insert db l >>= fun () ->
            let l = List.map (fun x -> let i = !n in incr n; (i, x)) l in
            lwt l' = S.select db expr in
            let l' = List.sort compare l' in
@@ -102,7 +102,7 @@ struct
     with_db
       (fun db () ->
          let n = ref 1 in
-           insert db l >>
+           insert db l >>= fun () ->
            let l = List.map (fun x -> let i = !n in incr n; (i, Some x)) l in
            lwt l' = S.select db expr in
            let l' = List.sort compare l' in
@@ -117,8 +117,8 @@ struct
   let test_oexpr_directives =
     with_db
       (fun db () ->
-         S.select db sql"SELECT @d{%d}" 42 >|= aeq_list ~printer:(sprintf "%d") [42] >>
-         S.select db sql"SELECT @f{%d}" 42 >|= aeq_list ~printer:(sprintf "%f") [42.] >>
+         S.select db sql"SELECT @d{%d}" 42 >|= aeq_list ~printer:(sprintf "%d") [42] >>= fun () ->
+         S.select db sql"SELECT @f{%d}" 42 >|= aeq_list ~printer:(sprintf "%f") [42.] >>= fun () ->
          S.select db sql"SELECT @s{%d}" 42 >|= aeq_list ~printer:(sprintf "%s") ["42"])
 
   let (>::) name f = name >:: (fun () -> run (f ()))
@@ -167,24 +167,24 @@ struct
       let insert db = S.execute db sql"INSERT INTO foo(id, data) VALUES(%d, %s)" in
       let aeq = aeq_list ~printer:s_of_pair in
       let aeq_one = assert_equal ~printer:s_of_pair in
-        S.execute db sql"CREATE TABLE foo(id INTEGER NOT NULL, data TEXT NOT NULL)" >>
-        get_rows db >|= aeq ~msg:"Init" [] >>
+        S.execute db sql"CREATE TABLE foo(id INTEGER NOT NULL, data TEXT NOT NULL)" >>= fun () ->
+        get_rows db >|= aeq ~msg:"Init" [] >>= fun () ->
         S.transaction db
           (fun db ->
-             get_rows db >|= aeq [] >>
-             insert db 1 "foo" >>
-             get_rows db >|= aeq ~msg:"One insert in TX" [1, "foo"] >>
-             get_one db >|= aeq_one ~msg:"select_one after 1 insert in TX" (1, "foo") >>
+             get_rows db >|= aeq [] >>= fun () ->
+             insert db 1 "foo" >>= fun () ->
+             get_rows db >|= aeq ~msg:"One insert in TX" [1, "foo"] >>= fun () ->
+             get_one db >|= aeq_one ~msg:"select_one after 1 insert in TX" (1, "foo") >>= fun () ->
              get_one' db >|= aeq_one ~msg:"select_one (cached) after 1 insert in TX"
-                               (1, "foo") >>
+                               (1, "foo") >>= fun () ->
              try_lwt
                S.transaction db
                  (fun db ->
-                    insert db 2 "bar" >>
-                    get_rows db >|= aeq ~msg:"Insert in nested TX" [1, "foo"; 2, "bar";] >>
+                    insert db 2 "bar" >>= fun () ->
+                    get_rows db >|= aeq ~msg:"Insert in nested TX" [1, "foo"; 2, "bar";] >>= fun () ->
                     fail Cancel)
              with Cancel ->
-               get_rows db >|= aeq ~msg:"After nested TX is canceled" [1, "foo"]) >>
+               get_rows db >|= aeq ~msg:"After nested TX is canceled" [1, "foo"]) >>= fun () ->
         get_rows db >|= aeq [1, "foo"];
     end ()
 
@@ -196,7 +196,7 @@ struct
     let insert v db =
       (* SELECT acquires a SHARED lock if needed *)
       lwt _ = count_rows db in
-        Lwt.sleep 0.010 >>
+        Lwt.sleep 0.010 >>= fun () ->
         (* RESERVED lock acquired if needed *)
         S.insert db sqlc"INSERT INTO foo VALUES(%d)" v in
 
@@ -204,7 +204,7 @@ struct
     let db1   = S.open_db fname in
     let db2   = S.open_db fname in
 
-      S.execute db1 sqlc"CREATE TABLE foo(id INTEGER PRIMARY KEY)" >>
+      S.execute db1 sqlc"CREATE TABLE foo(id INTEGER PRIMARY KEY)" >>= fun () ->
       (* these 2 TXs are serialized because they are EXCLUSIVE *)
       lwt _   = S.transaction ~kind:`EXCLUSIVE db1 (insert 1)
       and _   = S.transaction ~kind:`EXCLUSIVE db2 (insert 2) in
@@ -214,9 +214,9 @@ struct
 
   let test_fold_and_iter () =
     with_db begin fun db () ->
-      S.execute db sql"CREATE TABLE foo(n INTEGER NOT NULL)" >>
+      S.execute db sql"CREATE TABLE foo(n INTEGER NOT NULL)" >>= fun () ->
       let l = Array.to_list (Array.init 100 (fun n -> 1 + Random.int 100000)) in
-        iter (S.execute db sqlc"INSERT INTO foo(n) VALUES(%d)") l >>
+        iter (S.execute db sqlc"INSERT INTO foo(n) VALUES(%d)") l >>= fun () ->
         let sum = List.fold_left (+) 0 l in
         lwt count, sum' =
           S.fold db
@@ -238,11 +238,11 @@ struct
     end ()
 
   let rec do_test_nested_iter_and_fold db () =
-    nested_iter_and_fold_write db >>
+    nested_iter_and_fold_write db >>= fun () ->
     nested_iter_and_fold_read db
 
   and nested_iter_and_fold_write db =
-    S.execute db sql"CREATE TABLE foo(n INTEGER NOT NULL)" >>
+    S.execute db sql"CREATE TABLE foo(n INTEGER NOT NULL)" >>= fun () ->
     iter (S.execute db sqlc"INSERT INTO foo(n) VALUES(%d)") [1; 2; 3]
 
   and nested_iter_and_fold_read db =
@@ -274,7 +274,7 @@ struct
 
   let expect_missing_table tbl f =
     try_lwt
-      f () >>
+      f () >>= fun () ->
       assert_failure (sprintf "Expected Sqlite3.Error: missing table %s" tbl)
     with Sqlexpr_sqlite.Error _ -> return ()
 
@@ -284,8 +284,8 @@ struct
        * sequentially we end up using the same one all the time *)
       S.borrow_worker db
         (fun db' ->
-           S.borrow_worker db (fun db'' -> do_test_nested_iter_and_fold db'' ()) >>
-           nested_iter_and_fold_read db') >>
+           S.borrow_worker db (fun db'' -> do_test_nested_iter_and_fold db'' ()) >>= fun () ->
+           nested_iter_and_fold_read db') >>= fun () ->
       nested_iter_and_fold_read db
     end ()
 
@@ -316,7 +316,7 @@ let test_lwt_recursive_mutex () =
   let push x = l := x :: !l; return () in
   lwt n = M.with_lock m (fun () -> M.with_lock m (fun () -> return 42)) in
     aeq_int 42 n;
-    let t1 = M.with_lock m (fun () -> push 1 >> Lwt_mvar.take mv >> push 2) in
+    let t1 = M.with_lock m (fun () -> push 1 >>= fun () -> Lwt_mvar.take mv >>= fun () -> push 2) in
     let t2 = M.with_lock m (fun () -> push 3) in
     lwt () = Lwt.join [ t1; t2; Lwt_mvar.put mv () ] in
       aeq_list ~printer:string_of_int [3; 2; 1] !l;
@@ -344,7 +344,7 @@ let test_exclusion (type a)
       ((module S : S_LWT with type db = a) as s) () =
   let module Sqlexpr = S in
   with_db s ~in_mem:false begin fun db () ->
-    S.execute db sql"CREATE TABLE foo(n INTEGER NOT NULL)" >>
+    S.execute db sql"CREATE TABLE foo(n INTEGER NOT NULL)" >>= fun () ->
 
     let exclusion_between_tx_and_single_stmt () =
       let t1, u1 = Lwt.wait () in
@@ -352,12 +352,12 @@ let test_exclusion (type a)
       let t3, u3 = Lwt.wait () in
       let th1    = S.transaction db
                      (fun db ->
-                        t1 >|= Lwt.wakeup u2 >>
-                        Lwt_unix.sleep 0.010 >>
+                        t1 >|= Lwt.wakeup u2 >>= fun () ->
+                        Lwt_unix.sleep 0.010 >>= fun () ->
                         S.select_one db sql"SELECT @d{COUNT(*)} FROM foo" >|=
                           aeq_int ~msg:"number of rows (single stmt exclusion)" 0)
       and th2    = begin
-                     t3 >>
+                     t3 >>= fun () ->
                      S.execute db sql"INSERT INTO foo VALUES(1)"
                    end
       and th3    = begin
@@ -384,7 +384,7 @@ let test_exclusion (type a)
       in
         Lwt.join (Sqlexpr_utils.List.init 1 (fun _ -> S.transaction db check))
     in
-      exclusion_between_txs () >>
+      exclusion_between_txs () >>= fun () ->
       exclusion_between_tx_and_single_stmt ()
   end ()
 
