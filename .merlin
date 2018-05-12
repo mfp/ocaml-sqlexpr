@@ -6,7 +6,7 @@ B _build/src/syntax
 B _build/tests
 B +threads
 PKG lwt
-PKG lwt.ppx
+PKG lwt_ppx
 PKG sqlite3
 PKG unix
 PKG csv

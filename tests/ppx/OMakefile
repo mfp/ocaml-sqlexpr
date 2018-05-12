@@ -11,7 +11,7 @@ section
         compiler-libs.common
         csv
         lwt
-        lwt.ppx
+        lwt_ppx
         lwt.unix
         ppx_tools.metaquot
         re.pcre

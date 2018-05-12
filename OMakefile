@@ -6,7 +6,7 @@ OCAMLPACKS[] =
     csv
     sqlite3
     lwt
-    lwt.ppx
+    lwt_ppx
     lwt.unix
     threads
 

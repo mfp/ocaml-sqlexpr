@@ -21,7 +21,7 @@
  ((name         t_sqlexpr)
   (modules      (t_sqlexpr))
   (libraries    (sqlexpr oUnit lwt))
-  (preprocess   (pps (ppx_sqlexpr lwt.ppx)))))
+  (preprocess   (pps (ppx_sqlexpr lwt_ppx)))))
 
 (alias
  ((name runtest)

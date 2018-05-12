@@ -208,7 +208,7 @@ ocamlfind ocamlc -package sqlexpr,pa_sqlexpr,lwt.syntax,oUnit -syntax camlp4o -l
 
 PPX based tests:
 ```
-ocamlfind ocamlc -package sqlexpr.ppx,lwt.ppx,oUnit -ppxopt lwt.ppx,-no-debug -linkpkg -thread -o sqlexpr_ppx_test tests/ppx/t_sqlexpr.ml
+ocamlfind ocamlc -package sqlexpr.ppx,lwt_ppx,oUnit -ppxopt lwt_ppx,-no-debug -linkpkg -thread -o sqlexpr_ppx_test tests/ppx/t_sqlexpr.ml
 ```
 or
 ```
