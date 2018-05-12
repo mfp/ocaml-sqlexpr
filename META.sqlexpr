@@ -3,7 +3,6 @@ requires = "bigarray
             bytes
             csv
             lwt
-            lwt.log
             lwt.unix
             result
             sqlite3
