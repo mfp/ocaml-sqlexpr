@@ -11,5 +11,6 @@ build: [
 depends: [
   "jbuilder" {build}
   "sqlexpr"
+  "estring"
   "camlp4"
 ]
