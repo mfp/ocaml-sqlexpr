@@ -64,8 +64,9 @@ struct
   let with_value = Lwt.with_value
 
   let try_bind f f' catch =
-    try f' (f ())
-    with e -> catch e
+    match f () with
+      | exception e -> catch e
+      | x -> f' x
 
   let backtrace_bind g x f =
     try f x
@@ -76,18 +77,16 @@ struct
     with e -> catch (g e)
 
   let backtrace_finalize g f finally =
-    try
-      let x = f() in
-      finally();
-      x
-    with e -> raise (g e)
+    match f () with
+      | exception e -> finally (); raise (g e)
+      | x ->
+          finally ();
+          x
 
   let backtrace_try_bind g f f' catch =
-    try
-      let x = f() in
-      f' x
-    with e ->
-      catch (g e)
+    match f () with
+      | exception e -> catch (g e)
+      | x -> f' x
 
   let register_finaliser f x =
     (* FIXME: should run finalisers sequentially in separate thread *)

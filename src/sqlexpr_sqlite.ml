@@ -747,13 +747,15 @@ struct
       (fun stmt sql params ->
          let auto_yield = M.auto_yield 0.01 in
          let rec loop l =
-           let%lwt () = auto_yield () in
+           auto_yield () >>= fun () ->
            POOL.step stmt >>= function
                Sqlite3.Rc.ROW ->
-                 let%lwt data = POOL.row_data stmt in
-                 let%lwt () = check_num_cols "select" stmt expr data in
-                 let%lwt x = Lwt.catch (fun () -> f (snd expr.get_data data)) Lwt.fail in
-                   loop (x :: l)
+                 POOL.row_data stmt >>= fun data ->
+                 check_num_cols "select" stmt expr data >>= fun () ->
+                 Lwt.try_bind
+                   (fun () -> f (snd expr.get_data data))
+                   (fun x -> loop (x :: l))
+                   Lwt.fail
              | Sqlite3.Rc.DONE -> return (List.rev l)
              | rc -> POOL.raise_error ~sql ~params stmt rc
          in ensure_reset_stmt stmt loop [])
@@ -878,16 +880,16 @@ struct
       (fun stmt sql params ->
          let auto_yield = M.auto_yield 0.01 in
          let rec loop acc =
-           let%lwt () = auto_yield () in
+           auto_yield () >>= fun () ->
            POOL.step stmt >>= function
                Sqlite3.Rc.ROW ->
-                 Lwt.catch
+                 Lwt.try_bind
                    (fun () ->
-                     let%lwt data = POOL.row_data stmt in
-                     let%lwt () = check_num_cols "fold" stmt expr data in
+                     POOL.row_data stmt >>= fun data ->
+                     check_num_cols "fold" stmt expr data >>= fun () ->
                        f acc (snd expr.get_data data))
+                   loop
                    Lwt.fail
-                 >>= loop
              | Sqlite3.Rc.DONE -> return acc
              | rc -> POOL.raise_error ~sql ~params stmt rc
          in ensure_reset_stmt stmt loop init)
@@ -920,16 +922,16 @@ struct
       (fun stmt sql params ->
          let auto_yield = M.auto_yield 0.01 in
          let rec loop () =
-           let%lwt () = auto_yield () in
+           auto_yield () >>= fun () ->
            POOL.step stmt >>= function
                Sqlite3.Rc.ROW ->
-                 Lwt.catch
+                 Lwt.try_bind
                    (fun () ->
-                     let%lwt data = POOL.row_data stmt in
-                     let%lwt () = check_num_cols "iter" stmt expr data in
+                     POOL.row_data stmt >>= fun data ->
+                     check_num_cols "iter" stmt expr data >>= fun () ->
                        f (snd expr.get_data data))
+                   loop
                    Lwt.fail
-                 >>= loop
              | Sqlite3.Rc.DONE -> return ()
              | rc -> POOL.raise_error stmt ~sql ~params rc
          in ensure_reset_stmt stmt loop ())
