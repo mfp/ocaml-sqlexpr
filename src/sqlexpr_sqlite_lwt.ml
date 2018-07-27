@@ -384,8 +384,10 @@ struct
 
   let borrow_worker db f =
     let db' =
-      { (open_db ~init:db.init_func db.file) with max_workers = 1;
-                                                tx_key = db.tx_key;
+      { (open_db ~init:db.init_func db.file) with
+          max_workers  = 1;
+          worker_count = 1;
+          tx_key = db.tx_key;
       } in
     let%lwt worker = get_worker db in
       add_worker db' { worker with db = db' } ;
@@ -399,8 +401,10 @@ struct
 
   let steal_worker db f =
     let db' =
-      { (open_db ~init:db.init_func db.file) with max_workers = 1;
-                                                tx_key = db.tx_key;
+      { (open_db ~init:db.init_func db.file) with
+          max_workers = 1;
+          worker_count = 1;
+          tx_key = db.tx_key;
       } in
     let%lwt worker = get_worker db in
       add_worker db' { worker with db = db' } ;
