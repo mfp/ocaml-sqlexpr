@@ -234,7 +234,7 @@ struct
       | Some w -> wakeup w worker
 
   (* Wait for thread to be available, then return it: *)
-  let rec get_thread () =
+  let get_thread () =
     if not (Queue.is_empty threads) then
       return (Queue.take threads)
     else if !thread_count < !max_threads then
@@ -316,7 +316,7 @@ struct
     let%lwt _ = run ?retry_on_busy ?stmt ?sql ?params worker f x in return ()
 
   (* Wait for worker to be available, then return it: *)
-  let rec get_worker db =
+  let get_worker db =
     if not (WSet.is_empty db.free_workers) then
       return (WSet.take db.free_workers)
     else if db.worker_count < db.max_workers then
