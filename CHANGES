@@ -2,6 +2,7 @@
 ==================
 * fix Sqlexpr_sqlite_lwt nested transaction bug: partial rollback not
   performed
+* migrate to dune (final version of jbuilder)
 
 0.9.0  (2018-05-12)
 =====
