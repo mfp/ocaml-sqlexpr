@@ -67,17 +67,17 @@ let parse str =
   let outs = Re.all outrgx escaped |> List.fold_left getout [] |> List.rev in
 
   (* replace input and output params with regular SQL *)
-  let in_subst substrs = "?" in
+  let in_subst _substrs = "?" in
 
   let rep_count_out = ref 0 in
-  let out_subst substrs =
+  let out_subst _substrs =
     let (name, _,_) = List.nth outs !rep_count_out in
     incr rep_count_out;
     name in
 
   (* now restore the escaped strings *)
   let rep_esc_count = ref 0 in
-  let unesc_subst substrs =
+  let unesc_subst _substrs =
     let restore = List.nth !esc_list !rep_esc_count in
     incr rep_esc_count;
     restore in

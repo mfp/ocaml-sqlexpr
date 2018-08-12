@@ -54,7 +54,7 @@ let gen_expr ~cacheable sql inp outp =
     let e = match conv_exprs with
         [] -> assert false
       | [x] -> x
-      | hd::tl -> Exp.tuple conv_exprs in
+      | _ -> Exp.tuple conv_exprs in
     [%expr fun [%p AC.pvar id] -> [%e e]] in
   [%expr {
     Sqlexpr.statement = [%e stmt];

@@ -120,7 +120,7 @@ struct
              WT.iter (fun stmt -> Stmt.finalize stmt) w.stmts;
              ignore (Sqlite3.db_close handle))
           ()
-      with e -> return () (* FIXME: log? *)
+      with _ -> return () (* FIXME: log? *)
     )
 
   let new_id =
@@ -308,7 +308,7 @@ struct
         let%lwt errmsg = detach worker (fun dbh () -> Sqlite3.errmsg dbh) () in
         let%lwt () = begin match stmt with
             None -> return ()
-          | Some stmt -> let%lwt _ = detach worker (fun dbh -> Stmt.reset) stmt in return ()
+          | Some stmt -> let%lwt _ = detach worker (fun _dbh -> Stmt.reset) stmt in return ()
         end in
         raise_error worker ?sql ?params ~errmsg code
 
@@ -371,7 +371,7 @@ struct
     let%lwt () =
       (* the list of params is reversed *)
       ( detach worker
-          (fun dbh stmt ->
+          (fun _dbh stmt ->
              let n = ref nparams in
                List.iter
                  (fun v -> match Stmt.bind stmt !n v with
