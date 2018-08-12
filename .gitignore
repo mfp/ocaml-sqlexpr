@@ -41,3 +41,4 @@ oUnit-anon.cache
 /ocaml-sqlexpr*
 *.mldylib
 .merlin
+*.install
