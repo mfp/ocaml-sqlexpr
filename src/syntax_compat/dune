@@ -1,15 +1,13 @@
 (* -*- tuareg -*- *)
 
 let jbuild = {str|
-(jbuild_version 1)
-
 (library
- ((name        pa_sql_)
-  (public_name sqlexpr.syntax)
-  (synopsis "Camlp4 syntax for sqlexpr")
-  (libraries (camlp4 camlp4.quotations.r estring))
-  (library_flags (-linkall))
-  (preprocess (action (run camlp4orf ${<})))))
+ (name        pa_sql_)
+ (public_name sqlexpr.syntax)
+ (synopsis "Camlp4 syntax for sqlexpr")
+ (libraries camlp4 camlp4.quotations.r estring)
+ (library_flags -linkall)
+ (preprocess (action (run camlp4orf ${<})))))
 |str}
 
 let safe_string =
@@ -24,4 +22,4 @@ let estring =
   with Not_found -> false
 
 let () =
-  Jbuild_plugin.V1.send @@ if estring then jbuild else "(jbuild_version 1)"
+  Jbuild_plugin.V1.send @@ if estring then jbuild else ""
