@@ -6,6 +6,7 @@
   (synopsis "Sqlexpr PPX syntax extension")
   (wrapped false)
   (kind ppx_rewriter)
+  (flags (:standard -w -9))
   (libraries (ppx_core unix re.pcre compiler-libs.common
               ocaml-migrate-parsetree ppx_tools_versioned))
   (preprocess (pps (ppx_tools_versioned.metaquot_403)))))
