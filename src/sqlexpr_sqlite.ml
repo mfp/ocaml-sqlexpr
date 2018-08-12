@@ -552,7 +552,6 @@ struct
     let%lwt _ = step ?sql ?params stmt in
     return (Sqlite3.last_insert_rowid (Stmt.db_handle stmt))
 
-  let reset_with_errcode stmt = return (Stmt.reset stmt)
   let reset stmt = ignore (Stmt.reset stmt); return ()
   let row_data stmt = return (Stmt.row_data stmt)
 
@@ -827,9 +826,6 @@ struct
           incr tx_id_counter;
           if !tx_id_counter < 0 then tx_id_counter := 0;
           sprintf "__sqlexpr_sqlite_tx_%d_%d" pid n
-
-  let unsafe_execute db ?retry_on_busy fmt =
-    ksprintf (POOL.unsafe_execute db ?retry_on_busy) fmt
 
   let unsafe_execute_prof text db ?retry_on_busy fmt =
     ksprintf

@@ -5,8 +5,6 @@ open Lwt
 module Option = Sqlexpr_utils.Option
 module CONC = Sqlexpr_concurrency.Lwt
 
-let failwithfmt fmt = ksprintf (fun s -> Lwt.fail (Failure s)) fmt
-
 (* Total number of threads currently running: *)
 let thread_count = ref 0
 
