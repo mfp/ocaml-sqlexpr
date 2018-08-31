@@ -96,7 +96,7 @@ let sqlcheck_sqlite () =
     let ret = ref true in
     List.iter (fun stmt -> match Sqlite3.exec db stmt with
       | Sqlite3.Rc.OK -> ()
-      | rc -> begin
+      | _ -> begin
         ret := false;
         Format.fprintf fmt "Error in init. SQL statement (%s)@ %S@\n"
           (Sqlite3.errmsg db) stmt
