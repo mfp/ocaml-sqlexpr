@@ -1,4 +1,4 @@
-0.9.1 (unreleased)
+1.0.0 (unreleased)
 ==================
 * fix Sqlexpr_sqlite_lwt nested transaction bug: partial rollback not
   performed
