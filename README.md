@@ -198,7 +198,7 @@ ocamlfind ocamlc -package sqlexpr.ppx -linkpkg -thread -o sqlexpr_ppx tests/ppx/
 ```
 or
 ```
-jbuilder build tests/ppx/example.exe
+dune build tests/ppx/example.exe
 ```
 
 Camlp4 based tests:
@@ -212,5 +212,5 @@ ocamlfind ocamlc -package sqlexpr.ppx,lwt_ppx,oUnit -ppxopt lwt_ppx,-no-debug -l
 ```
 or
 ```
-jbuilder runtest ./tests/ppx
+dune runtest ./tests/ppx
 ```

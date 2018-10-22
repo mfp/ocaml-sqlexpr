@@ -34,7 +34,7 @@ let parse str =
   (* grievous hack to escape everything within quotes *)
   (* what about ignoring \' or \" ?       " *)
   (* manually escape "" because {| ... |} notation breaks syntax highlighting *)
-  let escrgx = Re_pcre.regexp "('[^']*')|(\"[^\"]*\")" in
+  let escrgx = Re.Pcre.regexp "('[^']*')|(\"[^\"]*\")" in
   let esc_list = ref [] in
   let esc_str = "<SQLEXPR_PRESERVED>" in
   let esc_subst substrings =
@@ -46,8 +46,8 @@ let parse str =
   esc_list := List.rev !esc_list;
 
   (* logic to extract inputs and outputs *)
-  let inrgx = Re_pcre.regexp {|%([dlLfsSba])(\?)?|} in
-  let outrgx = Re_pcre.regexp {|@([dlLfsSba])(\?)?\{([^}]+)\}|} in
+  let inrgx = Re.Pcre.regexp {|%([dlLfsSba])(\?)?|} in
+  let outrgx = Re.Pcre.regexp {|@([dlLfsSba])(\?)?\{([^}]+)\}|} in
   let getin (acc : input list) s =
     let groups = Re.get_all s in
     let typ = Array.get groups 1 |> str2typ in
@@ -67,17 +67,17 @@ let parse str =
   let outs = Re.all outrgx escaped |> List.fold_left getout [] |> List.rev in
 
   (* replace input and output params with regular SQL *)
-  let in_subst substrs = "?" in
+  let in_subst _substrs = "?" in
 
   let rep_count_out = ref 0 in
-  let out_subst substrs =
+  let out_subst _substrs =
     let (name, _,_) = List.nth outs !rep_count_out in
     incr rep_count_out;
     name in
 
   (* now restore the escaped strings *)
   let rep_esc_count = ref 0 in
-  let unesc_subst substrs =
+  let unesc_subst _substrs =
     let restore = List.nth !esc_list !rep_esc_count in
     incr rep_esc_count;
     restore in
@@ -86,7 +86,7 @@ let parse str =
   let sql =
        Re.replace ~f:out_subst outrgx escaped
     |> Re.replace ~f:in_subst inrgx
-    |> Re.replace ~f:unesc_subst (Re_pcre.regexp esc_str) in
+    |> Re.replace ~f:unesc_subst (Re.Pcre.regexp esc_str) in
 
   (* final return *)
   (sql, ins, outs)

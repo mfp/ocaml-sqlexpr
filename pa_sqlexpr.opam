@@ -6,10 +6,10 @@ homepage: "http://github.com/mfp/ocaml-sqlexpr"
 dev-repo: "https://github.com/mfp/ocaml-sqlexpr.git"
 bug-reports: "https://github.com/mfp/ocaml-sqlexpr/issues"
 build: [
-  [ "jbuilder" "build" "-p" name "-j" jobs ]
+  [ "dune" "build" "-p" name "-j" jobs ]
 ]
 depends: [
-  "jbuilder" {build}
+  "dune" {build & >= "1.1.1"}
   "sqlexpr"
   "estring"
   "camlp4"

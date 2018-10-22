@@ -57,7 +57,7 @@ let gen_expr ~cacheable sql inp outp =
     let e = match conv_exprs with
         [] -> assert false
       | [x] -> x
-      | hd::tl -> Exp.tuple conv_exprs in
+      | _ -> Exp.tuple conv_exprs in
     [%expr fun [%p AC.pvar id] -> [%e e]] in
   [%expr {
     Sqlexpr.statement = [%e stmt];
@@ -99,7 +99,7 @@ let sqlcheck_sqlite () =
     let ret = ref true in
     List.iter (fun stmt -> match Sqlite3.exec db stmt with
       | Sqlite3.Rc.OK -> ()
-      | rc -> begin
+      | _rc -> begin
         ret := false;
         Format.fprintf fmt "Error in init. SQL statement (%s)@ %S@\n"
           (Sqlite3.errmsg db) stmt

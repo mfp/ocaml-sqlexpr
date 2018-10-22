@@ -5,8 +5,6 @@ open Lwt
 module Option = Sqlexpr_utils.Option
 module CONC = Sqlexpr_concurrency.Lwt
 
-let failwithfmt fmt = ksprintf (fun s -> Lwt.fail (Failure s)) fmt
-
 (* Total number of threads currently running: *)
 let thread_count = ref 0
 
@@ -120,7 +118,7 @@ struct
              WT.iter (fun stmt -> Stmt.finalize stmt) w.stmts;
              ignore (Sqlite3.db_close handle))
           ()
-      with e -> return () (* FIXME: log? *)
+      with _ -> return () (* FIXME: log? *)
     )
 
   let new_id =
@@ -234,7 +232,7 @@ struct
       | Some w -> wakeup w worker
 
   (* Wait for thread to be available, then return it: *)
-  let rec get_thread () =
+  let get_thread () =
     if not (Queue.is_empty threads) then
       return (Queue.take threads)
     else if !thread_count < !max_threads then
@@ -308,7 +306,7 @@ struct
         let%lwt errmsg = detach worker (fun dbh () -> Sqlite3.errmsg dbh) () in
         let%lwt () = begin match stmt with
             None -> return ()
-          | Some stmt -> let%lwt _ = detach worker (fun dbh -> Stmt.reset) stmt in return ()
+          | Some stmt -> let%lwt _ = detach worker (fun _dbh -> Stmt.reset) stmt in return ()
         end in
         raise_error worker ?sql ?params ~errmsg code
 
@@ -316,7 +314,7 @@ struct
     let%lwt _ = run ?retry_on_busy ?stmt ?sql ?params worker f x in return ()
 
   (* Wait for worker to be available, then return it: *)
-  let rec get_worker db =
+  let get_worker db =
     if not (WSet.is_empty db.free_workers) then
       return (WSet.take db.free_workers)
     else if db.worker_count < db.max_workers then
@@ -371,7 +369,7 @@ struct
     let%lwt () =
       (* the list of params is reversed *)
       ( detach worker
-          (fun dbh stmt ->
+          (fun _dbh stmt ->
              let n = ref nparams in
                List.iter
                  (fun v -> match Stmt.bind stmt !n v with
@@ -396,8 +394,10 @@ struct
 
   let borrow_worker db f =
     let db' =
-      { (open_db ~init:db.init_func db.file) with max_workers = 1;
-                                                tx_key = db.tx_key;
+      { (open_db ~init:db.init_func db.file) with
+          max_workers  = 1;
+          worker_count = 1;
+          tx_key = db.tx_key;
       } in
     let%lwt worker = get_worker db in
       add_worker db' { worker with db = db' } ;
@@ -411,8 +411,10 @@ struct
 
   let steal_worker db f =
     let db' =
-      { (open_db ~init:db.init_func db.file) with max_workers = 1;
-                                                tx_key = db.tx_key;
+      { (open_db ~init:db.init_func db.file) with
+          max_workers = 1;
+          worker_count = 1;
+          tx_key = db.tx_key;
       } in
     let%lwt worker = get_worker db in
       add_worker db' { worker with db = db' } ;

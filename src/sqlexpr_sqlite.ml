@@ -137,7 +137,7 @@ struct
 
   and ('a, 'b) directive = (st -> 'b) -> st -> 'a
 
-  let literal x k st = k st
+  let literal _x k st = k st
 
   let param f k (params, nparams, sql, prep) x =
     k (f x :: params, nparams + 1, sql, prep)
@@ -302,9 +302,10 @@ struct
 
   (* accept a reversed list of params *)
   let profile_execute_sql sql ?(params = []) f =
+    ignore params; (* TODO: use params or remove it. *)
     match profile_ch with
         None -> f ()
-      | Some ch ->
+      | Some _ch ->
           let details =
             [ "name"; Digest.to_hex (Digest.string sql); "portal"; " " ]
           in profile_op "execute" details f
@@ -323,7 +324,7 @@ struct
   let profile_prepare_stmt sql f =
     match profile_ch with
         None -> f ()
-      | Some ch ->
+      | Some _ch ->
           let details =
             [ "query"; sql; "name"; Digest.to_hex (Digest.string sql) ]
           in profile_op "prepare" details f
@@ -431,7 +432,7 @@ struct
         let%lwt db = handle db in
           ignore (Sqlite3.db_close db);
           return ()
-      with e -> (* FIXME: log? *) return ()
+      with _ -> (* FIXME: log? *) return ()
       end
     with Sqlite3.Error _ -> () (* FIXME: raise? *)
 
@@ -551,7 +552,6 @@ struct
     let%lwt _ = step ?sql ?params stmt in
     return (Sqlite3.last_insert_rowid (Stmt.db_handle stmt))
 
-  let reset_with_errcode stmt = return (Stmt.reset stmt)
   let reset stmt = ignore (Stmt.reset stmt); return ()
   let row_data stmt = return (Stmt.row_data stmt)
 
@@ -722,7 +722,7 @@ struct
            (fun () -> POOL.step_with_last_insert_rowid ~sql ~params stmt) ())
       db p
 
-  let check_num_cols s stmt expr data =
+  let check_num_cols s _stmt expr data =
     let expected = fst expr.get_data in
     let actual = Array.length data in
       if expected = actual then return ()
@@ -742,7 +742,7 @@ struct
         let%lwt acc = f acc x in
           fold_left_s f acc tl
 
-  let select_f db ?batch f expr =
+  let select_f db ?batch:_ f expr =
     do_select
       (fun stmt sql params ->
          let auto_yield = M.auto_yield 0.01 in
@@ -827,9 +827,6 @@ struct
           if !tx_id_counter < 0 then tx_id_counter := 0;
           sprintf "__sqlexpr_sqlite_tx_%d_%d" pid n
 
-  let unsafe_execute db ?retry_on_busy fmt =
-    ksprintf (POOL.unsafe_execute db ?retry_on_busy) fmt
-
   let unsafe_execute_prof text db ?retry_on_busy fmt =
     ksprintf
       (fun sql ->
@@ -875,7 +872,7 @@ struct
              fail e
          end)
 
-  let fold db ?batch f init expr =
+  let fold db ?batch:_ f init expr =
     do_select
       (fun stmt sql params ->
          let auto_yield = M.auto_yield 0.01 in
@@ -917,7 +914,7 @@ struct
           db
           expr.statement
 
-  let iter db ?batch f expr =
+  let iter db ?batch:_ f expr =
     do_select
       (fun stmt sql params ->
          let auto_yield = M.auto_yield 0.01 in

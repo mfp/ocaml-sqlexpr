@@ -1,0 +1,30 @@
+(executable
+ (name         example)
+ (modules      example)
+ (libraries    sqlexpr oUnit)
+ (preprocess   (pps ppx_sqlexpr)))
+
+(executable
+ (name         t_parse)
+ (modules      t_parse)
+ (flags        (:standard -w -33))
+ (libraries    sqlexpr oUnit)
+ (preprocess   (pps ppx_sqlexpr)))
+
+(alias
+ (name runtest)
+ (package ppx_sqlexpr)
+ (action (run %{exe:t_parse.exe})))
+
+(executable
+ (name         t_sqlexpr)
+ (modules      t_sqlexpr)
+ (flags        (:standard -w -33))
+ (libraries    sqlexpr oUnit lwt)
+ (preprocess   (pps ppx_sqlexpr lwt_ppx)))
+
+(alias
+ (name runtest)
+ (package ppx_sqlexpr)
+ (action (run %{exe:t_sqlexpr.exe})))
+

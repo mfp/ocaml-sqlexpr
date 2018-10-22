@@ -10,4 +10,4 @@ PKG lwt_ppx
 PKG sqlite3
 PKG unix
 PKG csv
-PKG thread
+PKG threads

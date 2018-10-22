@@ -216,7 +216,7 @@ struct
   let test_fold_and_iter () =
     with_db begin fun db () ->
       S.execute db [%sql "CREATE TABLE foo(n INTEGER NOT NULL)"] >>= fun () ->
-      let l = Array.to_list (Array.init 100 (fun n -> 1 + Random.int 100000)) in
+      let l = Array.to_list (Array.init 100 (fun _n -> 1 + Random.int 100000)) in
         iter (S.execute db [%sqlc "INSERT INTO foo(n) VALUES(%d)"]) l >>= fun () ->
         let sum = List.fold_left (+) 0 l in
         let%lwt count, sum' =
@@ -374,7 +374,7 @@ let test_exclusion (type a)
 
     let exclusion_between_txs () =
       let inside = ref 0 in
-      let check db =
+      let check _db =
         let%lwt () = try%lwt
           incr inside;
           if !inside > 1 then
