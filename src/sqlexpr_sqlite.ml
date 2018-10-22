@@ -604,8 +604,8 @@ sig
   val select_one : db -> ('c, 'a, 'a result) expression -> 'c
   val select_one_maybe : db -> ('c, 'a, 'a option result) expression -> 'c
   val select_one_f : db -> ('a -> 'b result) -> ('c, 'a, 'b result) expression -> 'c
-  val select_one_f_maybe : db -> ('a -> 'b result) ->
-    ('c, 'a, 'b option result) expression -> 'c
+  val select_one_f_maybe : db -> ('a -> 'b result) -> ('c, 'a, 'b option result) expression -> 'c
+  val select_one_maybe_f : db -> ('a option -> 'b result) -> ('c, 'a, 'b result) expression -> 'c
 
   val transaction :
     db -> ?kind:[`DEFERRED | `IMMEDIATE | `EXCLUSIVE] ->
@@ -816,6 +816,9 @@ struct
   let select_one_f_maybe db f expr =
     select_one_f_aux db
       (fun x -> let%lwt y = f x in return (Some y)) (fun () -> return None) expr
+
+  let select_one_maybe_f db f expr =
+    select_one_f_aux db (fun x -> f (Some x)) (fun () -> f None) expr
 
   let new_tx_id =
     let pid = Unix.getpid () in
