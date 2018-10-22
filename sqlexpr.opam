@@ -27,6 +27,6 @@ messages: [
   {!pa_sqlexpr:installed}
 ]
 post-messages: [
-  "The sqlexpr.ppx and sqlexpr.syntax package aliases will be dropped
-eventually. Switch to ppx_sqlexpr and pa_sqlexpr now."
+  "The sqlexpr.ppx and sqlexpr.syntax package aliases have been dropped.
+Switch to ppx_sqlexpr and pa_sqlexpr."
   ]
