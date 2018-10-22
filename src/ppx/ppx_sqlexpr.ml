@@ -14,7 +14,10 @@ let new_id =
     Printf.sprintf "__ppx_sql_%d" !n
 
 let gen_stmt ~cacheable sql inp =
-  let mkapply fn args = AC.app (AC.evar fn) args in
+  let mkapply s args =
+    let txt = Longident.(Ldot (Ldot (Lident "Sqlexpr", "Directives"), s)) in
+    let fn  = Exp.ident { txt; loc = !default_loc } in
+      AC.app fn args in
 
   let k = new_id () in
   let st = new_id () in
@@ -33,7 +36,7 @@ let gen_stmt ~cacheable sql inp =
     inp
     [%expr [%e AC.evar k]] in
     let dir = [%expr fun [%p AC.pvar k] -> fun [%p AC.pvar st] ->
-      let open Sqlexpr.Directives in [%e exp] [%e AC.evar st]
+      [%e exp] [%e AC.evar st]
     ] in
   [%expr {
     Sqlexpr.sql_statement = [%e AC.str sql];
