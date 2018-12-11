@@ -1,7 +1,6 @@
-
+open Sqlexpr_utils
 open Printf
 
-module Option = Sqlexpr_utils.Option
 exception Error of string * exn
 exception Sqlite_error of string * Sqlite3.Rc.t
 
