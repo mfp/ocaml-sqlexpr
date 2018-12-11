@@ -1,6 +1,8 @@
 open Sqlexpr_sqlite
 open Lwt.Infix
 
+let src = Logs.Src.create "sqlexpr_sqlite_lwt"
+
 module Option = Sqlexpr_utils.Option
 module CONC = Sqlexpr_concurrency.Lwt
 
@@ -303,6 +305,8 @@ struct
         let%lwt () = Lwt_unix.sleep 0.010 in run ~retry_on_busy ?sql ?stmt ?params worker f x
     | code ->
         let%lwt errmsg = detach worker (fun dbh () -> Sqlite3.errmsg dbh) () in
+        let%lwt () =
+          Logs_lwt.err ~src (fun m -> m "%s: %s" (Sqlite3.Rc.to_string code) errmsg) in
         let%lwt () = begin match stmt with
             None -> Lwt.return_unit
           | Some stmt -> let%lwt _ = detach worker (fun _dbh -> Stmt.reset) stmt in Lwt.return_unit

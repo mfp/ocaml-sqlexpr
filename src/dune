@@ -4,5 +4,5 @@
  (synopsis "SQLite database access.")
  (wrapped false)
  (flags (:standard -w -9-3))
- (libraries csv sqlite3 lwt lwt.unix unix threads)
+ (libraries csv sqlite3 lwt lwt.unix unix threads logs.lwt)
  (preprocess (pps lwt_ppx)))

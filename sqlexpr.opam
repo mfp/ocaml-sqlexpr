@@ -18,6 +18,7 @@ depends: [
   "sqlite3"
   "base-unix"
   "ppx_sqlexpr"
+  "logs"
 ]
 depopts: [ "estring" ]
 
