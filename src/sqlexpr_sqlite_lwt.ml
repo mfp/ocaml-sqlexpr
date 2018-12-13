@@ -302,6 +302,7 @@ struct
     detach worker f x >>= function
       Sqlite3.Rc.OK | Sqlite3.Rc.ROW | Sqlite3.Rc.DONE as r -> Lwt.return r
     | Sqlite3.Rc.BUSY when retry_on_busy ->
+        let%lwt () = Logs_lwt.err ~src (fun m -> m "BUSY") in
         let%lwt () = Lwt_unix.sleep 0.010 in run ~retry_on_busy ?sql ?stmt ?params worker f x
     | code ->
         let%lwt errmsg = detach worker (fun dbh () -> Sqlite3.errmsg dbh) () in
