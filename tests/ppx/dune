@@ -1,8 +1,10 @@
 (executable
  (name         example)
+ (public_name  sqlexpr-example)
+ (preprocess   (pps ppx_sqlexpr))
+ (package      sqlexpr)
  (modules      example)
- (libraries    sqlexpr oUnit)
- (preprocess   (pps ppx_sqlexpr)))
+ (libraries    hex cstruct sqlexpr ppx_sqlexpr))
 
 (test
  (name         t_parse)
