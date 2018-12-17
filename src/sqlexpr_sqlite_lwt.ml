@@ -473,6 +473,9 @@ struct
                          | Error exn -> Batch_error (List.rev l, exn)
                  end
                | Sqlite3.Rc.DONE -> Batch_complete (List.rev l)
+               | Sqlite3.Rc.BUSY when !retry_on_busy ->
+                   Thread.delay 0.01;
+                   read_rows_loop n l
                | rc ->
                    let errmsg = Sqlite3.errmsg dbh in
                    let exn    =
