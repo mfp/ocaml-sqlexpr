@@ -385,7 +385,7 @@ let test_exclusion (type a)
         decr inside;
         Lwt.return ()
       in
-        Lwt.join (Sqlexpr_utils.List.init 1 (fun _ -> S.transaction db check))
+        S.transaction db check
     in
       exclusion_between_txs () >>= fun () ->
       exclusion_between_tx_and_single_stmt ()

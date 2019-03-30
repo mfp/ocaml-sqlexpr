@@ -1,5 +1,5 @@
 all:
-	dune build @install @runtest
+	dune build --root . @install @tests/runtest
 
 clean:
-	dune clean
+	dune clean --root .
