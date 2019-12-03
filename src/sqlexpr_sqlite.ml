@@ -290,6 +290,7 @@ struct
             (* the format used by PGOcaml *)
           let ret_txt = match ret with
               Ret _ -> "ok"
+            | Exn Not_found -> "ok"
             | Exn e -> Printexc.to_string e in
           let row =
             [ "1"; uuid; op; string_of_int elapsed_time_us; ret_txt] @
