@@ -80,7 +80,9 @@ struct
       let x = f() in
       finally();
       x
-    with e -> raise (g e)
+    with e ->
+      finally();
+      raise (g e)
 
   let backtrace_try_bind g f f' catch =
     try
